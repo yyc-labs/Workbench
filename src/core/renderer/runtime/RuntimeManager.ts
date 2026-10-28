@@ -6,12 +6,7 @@ class RuntimeManager {
   /** Background start — spawns the AI Coding CLI init script via detached WSL process.
    *  Does NOT open a terminal window. Use `openTerminal()` for that.
    *  Session name is computed in main process to match the script's MD5 naming. */
-  async startRuntime(
-    projectId: string,
-    projectPath: string,
-    profile?: AiRuntimeProfile | null,
-    cli?: 'claude' | 'codex',
-  ): Promise<boolean> {
+  async startRuntime(projectId: string, projectPath: string, profile?: AiRuntimeProfile | null, cli?: 'claude' | 'codex' | 'codebuddy'): Promise<boolean> {
     return window.electronAPI.startRuntime(projectId, projectPath, profile, cli)
   }
 

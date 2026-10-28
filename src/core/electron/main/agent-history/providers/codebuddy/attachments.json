@@ -1,0 +1,13 @@
+{
+  "messageTypeField": "type",
+  "messageTypes": ["message"],
+  "contentField": "content",
+  "attachments": [
+    {
+      "blockTypes": ["image_blob_ref"],
+      "sourceField": "blob_path",
+      "nameField": "blob_id",
+      "renderTag": "image"
+    }
+  ]
+}

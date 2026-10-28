@@ -1,11 +1,18 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import path, { dirname, join } from 'node:path'
-import type { BrowserWindow } from 'electron'
-import { app, dialog, Notification, shell } from 'electron'
+import { app, BrowserWindow, dialog, Notification, shell } from 'electron'
 import { projectIdFromPath } from '../../shared/rules'
-import type { AppConfig, BrowserScreenshotViewerPayload, Capability, TranscriptImportedEvent } from '../../shared/types'
+import type { AiRuntimeProfile, AppConfig, BrowserScreenshotViewerPayload, Capability, CliTool, TranscriptImportedEvent } from '../../shared/types'
+import { createFulltextSearchService } from './agent-history/fulltext/search-service'
+import { createAgentHistoryHandoffService } from './agent-history/handoff/handoff-service'
+import { createAgentHistoryServiceBundle, createAgentHistoryWatchServiceFor } from './agent-history/index'
+import { loadDynamicProviders } from './agent-history/providers/dynamic/loader'
+import { createAgentHistoryResumeService } from './agent-history/resume-service'
+import type { AgentHistoryScanService } from './agent-history/scan-service'
+import type { AgentHistoryWatchService } from './agent-history/watch-service'
 import { createAgentLogService } from './agent-logs/agent-log-service'
 import { createAiCommitService } from './ai-commit/ai-commit-service'
 import { createAiConnectionService } from './ai-connection/ai-connection-service'
@@ -72,6 +79,8 @@ export type AppServicesOptions = {
  * boundary callbacks, so services remain independent of Electron globals and
  * the entrypoint can focus on lifecycle/window assembly.
  */
+let agentHistoryServiceRef: ReturnType<typeof createAgentHistoryServiceBundle>
+
 export function createAppServices(options: AppServicesOptions) {
   const aiEnvironmentController = new AiEnvironmentController(
     options.getCapability,
@@ -361,6 +370,88 @@ export function createAppServices(options: AppServicesOptions) {
     quickActionScheduler,
     calendarService,
     calendarUpdater,
+    agentHistoryService: (agentHistoryServiceRef = (() => {
+      const bundle = createAgentHistoryServiceBundle({
+        loadConfig: options.loadConfig,
+        getCacheDbPath: () => join(app.getPath('userData'), 'agent-history', 'cache.db'),
+      })
+      // Stage 8: declarative providers from userData (validated strictly; no code execution).
+      const dynamic = loadDynamicProviders(app.getPath('userData'), {
+        getHomeDir: () => homedir(),
+        getWslHomeDir: async () => null,
+      })
+      for (const provider of dynamic.providers) bundle.providers.registerDynamic(provider)
+      return bundle
+    })()).service,
+    agentHistoryFulltext: createFulltextSearchService({
+      loadConfig: options.loadConfig,
+      cache: agentHistoryServiceRef.cache,
+      dataSourceRegistry: agentHistoryServiceRef.dataSourceRegistry,
+      getDefaultWslDistro: () => 'Ubuntu',
+    }),
+    agentHistoryHandoff: createAgentHistoryHandoffService({
+      loadConfig: options.loadConfig,
+      cache: agentHistoryServiceRef.cache,
+      getStorageDir: () => app.getPath('userData'),
+      startTargetRuntime: async (input) => {
+        // Prompt-injection: structured args array (position prompt), through
+        // the same AI Runtime chain as resume — WSL targets degrade upstream.
+        const target = options.loadConfig().projects.find((candidate) => {
+          try {
+            return require('../../shared/rules').projectIdFromPath(candidate.path) === input.projectId
+          } catch {
+            return false
+          }
+        })
+        if (!target) return false
+        const profile: AiRuntimeProfile = {
+          id: 'agent-history-handoff-' + input.agent,
+          name: input.agent === 'codex' ? 'Codex Handoff' : input.agent === 'codebuddy' ? 'CodeBuddy Handoff' : 'Claude Handoff',
+          kind: 'native',
+          mode: 'inherit',
+          cli: input.agent as CliTool,
+          command: input.agent,
+          args: [input.initialPrompt],
+          env: {},
+          passProjectPath: false,
+        }
+        return runtimeService.startRuntime(input.projectId, target.path, profile, input.agent as CliTool)
+      },
+      canTargetRead: (targetProjectId, filePath) => {
+        // WSL targets reach Windows paths through /mnt/<drive>; Windows targets
+        // reach \\wsl$ UNC. v1 conservatively allows same-namespace only.
+        const target = options.loadConfig().projects.find((candidate) => candidate.path && true)
+        void target
+        const targetPath =
+          options.loadConfig().projects.find((candidate) => {
+            try {
+              return require('./shared/rules').projectIdFromPath(candidate.path) === targetProjectId
+            } catch {
+              return false
+            }
+          })?.path ?? ''
+        const targetIsWsl = targetPath.startsWith('\\\\wsl') || /^\//.test(targetPath.trim())
+        const sourceIsWsl = filePath.startsWith('\\\\wsl') || filePath.includes('/mnt/')
+        return targetIsWsl === sourceIsWsl
+      },
+    }),
+    agentHistoryResume: createAgentHistoryResumeService({
+      loadConfig: options.loadConfig,
+      cache: agentHistoryServiceRef.cache,
+      providers: agentHistoryServiceRef.providers,
+      runtimeService: { startRuntime: (projectId, projectPath, profile, cli, resumeSessionId) => runtimeService.startRuntime(projectId, projectPath, profile, cli, resumeSessionId) },
+    }),
+    agentHistoryWatch: createAgentHistoryWatchServiceFor({
+      loadConfig: options.loadConfig,
+      service: agentHistoryServiceRef.service,
+      bundle: agentHistoryServiceRef,
+      notifyChanged: (hint) => {
+        // Broadcast to all windows; pages not showing sessions ignore the event.
+        for (const window of BrowserWindow.getAllWindows()) {
+          window.webContents.send(IPC.AGENT_HISTORY_CHANGED, hint)
+        }
+      },
+    }),
   }
 }
 

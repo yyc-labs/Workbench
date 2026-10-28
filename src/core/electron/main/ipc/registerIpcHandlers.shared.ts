@@ -2,6 +2,9 @@ import type { BrowserWindow } from 'electron'
 import http from 'http'
 import type { RunTaskProgressEvent } from '../../../shared/runTasks'
 import type { BrowserScreenshotViewerPayload, Capability, TranscriptCaptureInitialText, TranscriptGatewayImportPayload, TranscriptImportedEvent } from '../../../shared/types'
+import type { AgentHistoryResumeResult, AgentHistorySearchArgs, AgentHistorySearchResult } from '../../../shared/types/agentHistory'
+import type { AgentHistoryScanService } from '../agent-history/scan-service'
+import type { AgentHistoryWatchService } from '../agent-history/watch-service'
 import type { AgentLogService } from '../agent-logs/agent-log-service'
 import type { AiCommitService } from '../ai-commit/ai-commit-service'
 import type { AiConnectionService } from '../ai-connection/ai-connection-service'
@@ -71,6 +74,15 @@ export type RegisterIpcHandlersDependencies = {
   quickActionService: QuickActionService
   calendarService: CalendarService
   calendarUpdater: CalendarUpdater
+  agentHistoryService: AgentHistoryScanService
+  agentHistoryWatch: AgentHistoryWatchService
+  agentHistoryFulltext: { search(args: AgentHistorySearchArgs): Promise<AgentHistorySearchResult> }
+  agentHistoryResume: { resume(args: { projectId: string; sessionKey: string }): Promise<AgentHistoryResumeResult> }
+  agentHistoryHandoff: {
+    create(args: import('../../../shared/types/agentHistoryHandoff').AgentHistoryHandoffCreateArgs): Promise<{ ok: true; record: import('../../../shared/types/agentHistoryHandoff').AgentHistoryHandoffRecord } | { ok: false; reason: string }>
+    list(): import('../../../shared/types/agentHistoryHandoff').AgentHistoryHandoffRecord[]
+    confirm(id: string, loaded: boolean): import('../../../shared/types/agentHistoryHandoff').AgentHistoryHandoffRecord | null
+  }
 }
 
 type GitRequestWithRepoRoot = {

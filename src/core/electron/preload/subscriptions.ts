@@ -48,6 +48,8 @@ export function createSubscriptionApi() {
   return {
     onProcessOutput: (cb: (data: { projectId: string; data: string }) => void) => subscribeIpcEvent(IPC.PROCESS_OUTPUT, cb),
 
+    onAgentHistoryChanged: (cb: (data: { projectId: string; bursts: number }) => void) => subscribeIpcEvent(IPC.AGENT_HISTORY_CHANGED, cb),
+
     onRunTaskProgress: (cb: (data: RunTaskProgressEvent) => void) => subscribeIpcEvent(IPC.RUN_TASK_PROGRESS, cb),
 
     onRunTaskConfigChanged: (cb: (projectPath: string) => void) => subscribeIpcEvent(IPC.RUN_TASK_CONFIG_CHANGED, cb),

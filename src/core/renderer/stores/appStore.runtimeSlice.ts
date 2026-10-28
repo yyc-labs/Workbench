@@ -1,8 +1,8 @@
 import type { StateCreator } from 'zustand'
-import type { AppState } from './appStore.types'
-import { runtimeManager } from '../runtime/RuntimeManager'
-import { translateCurrent } from '../i18n'
 import { getAiRuntimeProfileCli, resolveAiRuntimeProfile, resolveProjectAiRuntimeProfileId, slugAiRuntimeProfileName } from '../../shared/aiRuntimeProfiles'
+import { translateCurrent } from '../i18n'
+import { runtimeManager } from '../runtime/RuntimeManager'
+import type { AppState } from './appStore.types'
 
 function waitForDelay(delayMs: number): Promise<void> {
   if (delayMs <= 0) return Promise.resolve()

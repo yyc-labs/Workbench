@@ -1,8 +1,8 @@
+import { Bot, Code2, FileText, History } from 'lucide-react'
 import { useRef } from 'react'
-import { Bot, Code2, FileText } from 'lucide-react'
 import { useI18n } from '../i18n'
 
-export type ProjectPaneTab = 'code' | 'aicommit' | 'transcript'
+export type ProjectPaneTab = 'code' | 'aicommit' | 'transcript' | 'sessions'
 export type ProjectPanePreloadIntent = 'intent' | 'navigate'
 export type ProjectPanePreloadOptions = {
   intent?: ProjectPanePreloadIntent
@@ -10,10 +10,7 @@ export type ProjectPanePreloadOptions = {
 export type ProjectPanePreloadHandle = {
   cancel: () => void
 }
-export type ProjectPanePreload = (
-  pane: ProjectPaneTab,
-  options?: ProjectPanePreloadOptions
-) => ProjectPanePreloadHandle
+export type ProjectPanePreload = (pane: ProjectPaneTab, options?: ProjectPanePreloadOptions) => ProjectPanePreloadHandle
 
 type ProjectPaneTabsProps = {
   activePane: ProjectPaneTab
@@ -39,20 +36,12 @@ export function ProjectPaneTabs({ activePane, onPreloadPane, onSelectPane }: Pro
   }
 
   return (
-    <div
-      className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1"
-      role="tablist"
-      aria-label={t('common.workspace')}
-    >
+    <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1" role="tablist" aria-label={t('common.workspace')}>
       <button
         type="button"
         role="tab"
         aria-selected={activePane === 'code'}
-        className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-          activePane === 'code'
-            ? 'bg-primary text-white'
-            : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-        }`}
+        className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${activePane === 'code' ? 'bg-primary text-white' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'}`}
         onFocus={() => {
           preloadIntent('code')
         }}
@@ -70,11 +59,7 @@ export function ProjectPaneTabs({ activePane, onPreloadPane, onSelectPane }: Pro
         type="button"
         role="tab"
         aria-selected={activePane === 'aicommit'}
-        className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-          activePane === 'aicommit'
-            ? 'bg-primary text-white'
-            : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-        }`}
+        className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${activePane === 'aicommit' ? 'bg-primary text-white' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'}`}
         onFocus={() => {
           preloadIntent('aicommit')
         }}
@@ -92,11 +77,7 @@ export function ProjectPaneTabs({ activePane, onPreloadPane, onSelectPane }: Pro
         type="button"
         role="tab"
         aria-selected={activePane === 'transcript'}
-        className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-          activePane === 'transcript'
-            ? 'bg-primary text-white'
-            : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-        }`}
+        className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${activePane === 'transcript' ? 'bg-primary text-white' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'}`}
         onFocus={() => {
           preloadIntent('transcript')
         }}
@@ -109,6 +90,24 @@ export function ProjectPaneTabs({ activePane, onPreloadPane, onSelectPane }: Pro
       >
         <FileText className="h-3.5 w-3.5" />
         {t('detail.transcript')}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activePane === 'sessions'}
+        className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${activePane === 'sessions' ? 'bg-primary text-white' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'}`}
+        onFocus={() => {
+          preloadIntent('sessions')
+        }}
+        onMouseEnter={() => {
+          preloadIntent('sessions')
+        }}
+        onMouseLeave={cancelPreloadIntent}
+        onBlur={cancelPreloadIntent}
+        onClick={() => selectPane('sessions')}
+      >
+        <History className="h-3.5 w-3.5" />
+        {t('agentHistory.tab')}
       </button>
     </div>
   )

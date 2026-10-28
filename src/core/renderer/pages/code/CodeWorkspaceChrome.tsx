@@ -26,6 +26,7 @@ type CodeWorkspaceChromeProps = {
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
   onOpenStartupLogs?: () => void
   onOpenTranscript?: () => void
+  onOpenSessions?: () => void
   onOpenProjectLinksManager?: () => void
   onOpenRunTasks?: () => void
   runTasksActive?: boolean
@@ -99,6 +100,7 @@ export function CodeWorkspaceChrome({
   onStartAndOpenDevUrl,
   onOpenStartupLogs,
   onOpenTranscript,
+  onOpenSessions,
   onOpenProjectLinksManager,
   onOpenRunTasks,
   runTasksActive = false,
@@ -144,6 +146,10 @@ export function CodeWorkspaceChrome({
                 onSelectPane={(pane) => {
                   if (pane === 'transcript') {
                     onOpenTranscript?.()
+                    return
+                  }
+                  if (pane === 'sessions') {
+                    onOpenSessions?.()
                     return
                   }
                   onSwitchPane?.(pane)

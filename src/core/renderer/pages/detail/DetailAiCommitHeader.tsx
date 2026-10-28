@@ -45,6 +45,7 @@ type DetailAiCommitHeaderProps = {
   onAiAutoCommitContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => void
   onCancelAiCommit: () => void
   onOpenTranscript?: () => void
+  onOpenSessions?: () => void
   onPreloadPane?: ProjectPanePreload
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
   onOpenStartupLogs?: () => void
@@ -91,6 +92,7 @@ export function DetailAiCommitHeader({
   onAiAutoCommitContextMenu,
   onCancelAiCommit,
   onOpenTranscript,
+  onOpenSessions,
   onPreloadPane,
   onStartAndOpenDevUrl,
   onOpenStartupLogs,
@@ -152,6 +154,10 @@ export function DetailAiCommitHeader({
                     onSelectPane={(pane) => {
                       if (pane === 'transcript') {
                         onOpenTranscript?.()
+                        return
+                      }
+                      if (pane === 'sessions') {
+                        onOpenSessions?.()
                         return
                       }
                       onSwitchPane?.(pane)

@@ -78,7 +78,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
   runStartupMode?: RunStartupMode
   pinned?: boolean
   lastOpened?: number
-  cli?: 'claude' | 'codex'
+  cli?: 'claude' | 'codex' | 'codebuddy'
   aiRuntimeProfileId?: string
   docLinks: ProjectInfo['docLinks']
   sharedDocLinkGroupIds?: string[]
@@ -147,7 +147,7 @@ export function applySavedProjectSnapshot(
     runStartupMode?: RunStartupMode
     pinned?: boolean
     lastOpened?: number
-    cli?: 'claude' | 'codex'
+    cli?: 'claude' | 'codex' | 'codebuddy'
     aiRuntimeProfileId?: string
     docLinks?: ProjectInfo['docLinks']
     sharedDocLinkGroupIds?: string[]

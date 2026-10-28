@@ -1,3 +1,4 @@
+import { registerAgentHistoryIpcHandlers } from './registerAgentHistoryIpcHandlers'
 import { registerAgentLogsIpcHandlers } from './registerAgentLogsIpcHandlers'
 import { registerAiConnectionIpcHandlers } from './registerAiConnectionIpcHandlers'
 import { registerAiGatewayIpcHandlers } from './registerAiGatewayIpcHandlers'
@@ -47,4 +48,5 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
   registerDocLinkLibraryIpcHandlers(deps.docLinkLibraryService)
   registerQuickActionIpcHandlers(deps)
   registerCalendarIpcHandlers(deps)
+  registerAgentHistoryIpcHandlers(deps)
 }

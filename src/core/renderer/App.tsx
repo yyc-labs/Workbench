@@ -1,15 +1,16 @@
 import { lazy, Suspense } from 'react'
-import { MemoryRouter as Router, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { useI18n } from './i18n'
-import { DEFAULT_SETTINGS_SECTION } from './pages/settings/settings.types'
-import { loadDetailPageModule, loadHomePageModule, loadLearningCenterPageModule, loadMarkdownDocumentPageModule, loadSettingsPageModule, loadTranscriptPageModule, preloadProjectPane } from './lib/projectPagePreload'
+import { Navigate, Route, MemoryRouter as Router, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AppGlobalEffects } from './app/AppGlobalEffects'
 import { AppWindowTitleBar, WindowTitleSync } from './app/AppWindowTitleBar'
 import { TerminalCollectionLayer } from './components/terminal-collection/TerminalCollectionLayer'
+import { useI18n } from './i18n'
+import { loadDetailPageModule, loadHomePageModule, loadLearningCenterPageModule, loadMarkdownDocumentPageModule, loadSessionsPageModule, loadSettingsPageModule, loadTranscriptPageModule, preloadProjectPane } from './lib/projectPagePreload'
+import { DEFAULT_SETTINGS_SECTION } from './pages/settings/settings.types'
 
 const HomePage = lazy(() => loadHomePageModule().then((module) => ({ default: module.HomePage })))
 const DetailPage = lazy(() => loadDetailPageModule().then((module) => ({ default: module.DetailPage })))
 const TranscriptPage = lazy(() => loadTranscriptPageModule().then((module) => ({ default: module.TranscriptPage })))
+const SessionsPage = lazy(() => loadSessionsPageModule().then((module) => ({ default: module.SessionsPage })))
 const SettingsPage = lazy(() => loadSettingsPageModule().then((module) => ({ default: module.SettingsPage })))
 const LearningCenterPage = lazy(() => loadLearningCenterPageModule().then((module) => ({ default: module.LearningCenterPage })))
 const MarkdownDocumentPage = lazy(() => loadMarkdownDocumentPageModule().then((module) => ({ default: module.MarkdownDocumentPage })))
@@ -42,6 +43,11 @@ function ProjectTranscriptRoute() {
   return <TranscriptPage key={projectId ?? 'unknown-project'} />
 }
 
+function ProjectSessionsRoute() {
+  const { projectId } = useParams<{ projectId: string }>()
+  return <SessionsPage key={projectId ?? 'unknown-project'} />
+}
+
 function LearningCenterRoute() {
   return <LearningCenterPage />
 }
@@ -61,6 +67,7 @@ export function App() {
               <Route path="/markdown" element={<MarkdownDocumentPage />} />
               <Route path="/project/:projectId" element={<Navigate to="code" replace />} />
               <Route path="/project/:projectId/transcript" element={<ProjectTranscriptRoute />} />
+              <Route path="/project/:projectId/sessions" element={<ProjectSessionsRoute />} />
               <Route path="/project/:projectId/:pane" element={<ProjectDetailRoute />} />
               <Route path="/settings" element={<Navigate to={`/settings/${DEFAULT_SETTINGS_SECTION}`} replace />} />
               <Route path="/settings/:section" element={<SettingsPage />} />

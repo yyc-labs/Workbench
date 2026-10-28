@@ -1,15 +1,15 @@
 import { spawn } from 'child_process'
-import { writeFileSync, unlinkSync } from 'fs'
+import { unlinkSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { loadConfig } from '../config'
 import { shouldUseWslForRuntimeEntrypoint } from '../../../shared/runtimeEntrypoint'
-import { listRuntimeEntries as listRegistryRuntimeEntries, removeRuntimeEntry, setRuntimeEntry } from '../runtime-registry'
-import type { RuntimeLaunchCommand } from '../ai-environment/provider-types'
-import type { ProcessManager } from '../runner'
-import { tmuxManager } from '../tmux-manager'
+import type { AiRuntimeProfile, Capability, RuntimeDiagnostics, RuntimeSessionInfo, TerminalProcessInventory, TerminalStopAllResult } from '../../../shared/types'
 import type { AiEnvironmentController } from '../ai-environment/environment-controller'
-import type { Capability, AiRuntimeProfile, RuntimeDiagnostics, RuntimeSessionInfo, TerminalProcessInventory, TerminalStopAllResult } from '../../../shared/types'
+import type { RuntimeLaunchCommand } from '../ai-environment/provider-types'
+import { loadConfig } from '../config'
+import type { ProcessManager } from '../runner'
+import { listRuntimeEntries as listRegistryRuntimeEntries, removeRuntimeEntry, setRuntimeEntry } from '../runtime-registry'
+import { tmuxManager } from '../tmux-manager'
 
 type RuntimeStateChangedPayload = {
   reason: string
@@ -180,18 +180,29 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
     return deps.aiEnvironmentController.diagnoseRuntime(profile)
   }
 
-  async function startRuntime(projectId: string, projectPath: string, profile?: AiRuntimeProfile | null, cli?: 'claude' | 'codex'): Promise<boolean> {
+  async function startRuntime(projectId: string, projectPath: string, profile?: AiRuntimeProfile | null, cli?: 'claude' | 'codex' | 'codebuddy', resumeSessionId?: string): Promise<boolean> {
     const diagnostics = await diagnoseRuntime(profile)
     if (diagnostics.issues.length > 0 && diagnostics.mode !== 'windows-native') {
       console.error('[runtime:start] diagnostics failed:', diagnostics.issues.join(' | '))
       return false
     }
 
+    // Stage 6 (plan 20): verified resume injection — args array only, sessionId
+    // format-checked before injection (P0-3 ③④).
+    const safeSessionId = resumeSessionId && /^[A-Za-z0-9._-]{1,128}$/.test(resumeSessionId) ? resumeSessionId : null
+    const resumeArgs = safeSessionId ? (cli === 'codex' ? ['resume', safeSessionId] : ['--resume', safeSessionId]) : []
+    const effectiveProfile: AiRuntimeProfile | null | undefined =
+      resumeArgs.length > 0
+        ? {
+            ...(profile ?? { id: 'agent-history-resume', name: 'Resume', kind: 'native' as const, mode: 'inherit' as const, cli: cli ?? 'claude', command: cli ?? 'claude', env: {}, passProjectPath: false }),
+            args: [...(profile?.args ?? []), ...resumeArgs],
+          }
+        : profile
     const plan = await deps.aiEnvironmentController.resolveRuntimeLaunch({
       projectId,
       projectPath,
-      cli: cli === 'codex' ? 'codex' : 'claude',
-      profile: profile ?? undefined,
+      cli: cli === 'codex' ? 'codex' : cli === 'codebuddy' ? 'codebuddy' : 'claude',
+      profile: effectiveProfile ?? undefined,
     })
 
     const launchAttempts: RuntimeLaunchCommand[] = [plan, ...(plan.fallbackLaunches ?? [])]

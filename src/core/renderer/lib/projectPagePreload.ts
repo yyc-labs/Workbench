@@ -8,6 +8,7 @@ type LearningCenterPageModule = typeof import('../pages/LearningCenterPage')
 type MarkdownDocumentPageModule = typeof import('../pages/markdown-document/MarkdownDocumentPage')
 type CodeWorkspacePanelModule = typeof import('../pages/code/CodeWorkspacePanel')
 type DetailAiCommitPaneHostModule = typeof import('../pages/detail/DetailAiCommitPaneHost')
+type SessionsPageModule = typeof import('../pages/sessions/SessionsPage')
 type MonacoPreloadModule = typeof import('./monacoPreload')
 
 const NOOP_PRELOAD_HANDLE: ProjectPanePreloadHandle = { cancel() {} }
@@ -21,6 +22,7 @@ let transcriptPageModulePromise: Promise<TranscriptPageModule> | null = null
 let settingsPageModulePromise: Promise<SettingsPageModule> | null = null
 let learningCenterPageModulePromise: Promise<LearningCenterPageModule> | null = null
 let markdownDocumentPageModulePromise: Promise<MarkdownDocumentPageModule> | null = null
+let sessionsPageModulePromise: Promise<SessionsPageModule> | null = null
 let codeWorkspacePanelModulePromise: Promise<CodeWorkspacePanelModule> | null = null
 let detailAiCommitPaneHostModulePromise: Promise<DetailAiCommitPaneHostModule> | null = null
 let monacoPreloadModulePromise: Promise<MonacoPreloadModule> | null = null
@@ -57,9 +59,49 @@ export function loadMarkdownDocumentPageModule(): Promise<MarkdownDocumentPageMo
   return markdownDocumentPageModulePromise
 }
 
+export function loadSessionsPageModule(): Promise<SessionsPageModule> {
+  sessionsPageModulePromise ??= import('../pages/sessions/SessionsPage')
+  return sessionsPageModulePromise
+}
+
 export function loadCodeWorkspacePanelModule(): Promise<CodeWorkspacePanelModule> {
-  codeWorkspacePanelModulePromise ??= import('../pages/code/CodeWorkspacePanel')
+  codeWorkspacePanelModulePromise ??= import('../pages/code/CodeWorkspacePanel').then((module) => {
+    // code 工作区是默认页：加载完成后趁空闲预热其余项目页路由模块，
+    // 避免首次点击「转录 / 会话」时才现拉取大模块图（markdown 渲染管线等）。
+    scheduleSecondaryProjectPageWarmup()
+    return module
+  })
   return codeWorkspacePanelModulePromise
+}
+
+let secondaryProjectPageWarmupScheduled = false
+const SECONDARY_WARMUP_IDLE_TIMEOUT_MS = 3000
+const SECONDARY_WARMUP_FALLBACK_DELAY_MS = 1500
+
+function scheduleSecondaryProjectPageWarmup(): void {
+  if (secondaryProjectPageWarmupScheduled) return
+  secondaryProjectPageWarmupScheduled = true
+
+  const run = () => {
+    void loadTranscriptPageModule()
+    void loadSessionsPageModule()
+  }
+
+  if (typeof window === 'undefined') {
+    run()
+    return
+  }
+
+  const idleWindow = window as Window & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
+  }
+
+  if (idleWindow.requestIdleCallback) {
+    idleWindow.requestIdleCallback(run, { timeout: SECONDARY_WARMUP_IDLE_TIMEOUT_MS })
+    return
+  }
+
+  window.setTimeout(run, SECONDARY_WARMUP_FALLBACK_DELAY_MS)
 }
 
 export function loadDetailAiCommitPaneHostModule(): Promise<DetailAiCommitPaneHostModule> {
@@ -138,12 +180,18 @@ function scheduleMonacoEditorPreload(): void {
 function normalizeProjectPane(pane: string | undefined): ProjectPaneTab {
   if (pane === 'aicommit' || pane === 'git') return 'aicommit'
   if (pane === 'transcript') return 'transcript'
+  if (pane === 'sessions') return 'sessions'
   return 'code'
 }
 
 function preloadProjectPaneNow(activePane: ProjectPaneTab): void {
   if (activePane === 'transcript') {
     void loadTranscriptPageModule()
+    return
+  }
+
+  if (activePane === 'sessions') {
+    void loadSessionsPageModule()
     return
   }
 

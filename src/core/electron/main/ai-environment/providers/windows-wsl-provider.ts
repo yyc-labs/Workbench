@@ -1,18 +1,13 @@
 import { createHash } from 'crypto'
 import { basename } from 'path'
+import type { AiShell, RuntimeDiagnostics, RuntimeSessionInfo } from '../../../../shared/types'
 import { tmuxManager } from '../../tmux-manager'
 import { wslBridge } from '../../wsl-bridge'
-import type { AiShell, RuntimeDiagnostics, RuntimeSessionInfo } from '../../../../shared/types'
 import type { AiExecutionProvider, ProviderContext } from '../provider-types'
-import {
-  buildEnvPrefix,
-  buildProfileAwareSessionName,
-  buildProfileCommandLine,
-  buildRuntimeProfileEnv,
-  quoteBashSingle,
-} from '../runtime-profile-launch'
+import { buildEnvPrefix, buildProfileAwareSessionName, buildProfileCommandLine, buildRuntimeProfileEnv, quoteBashSingle } from '../runtime-profile-launch'
 
-function normalizeRuntimeCli(cli?: 'claude' | 'codex'): 'claude' | 'codex' {
+function normalizeRuntimeCli(cli?: 'claude' | 'codex' | 'codebuddy'): 'claude' | 'codex' | 'codebuddy' {
+  if (cli === 'codebuddy') return 'codebuddy'
   return cli === 'codex' ? 'codex' : 'claude'
 }
 
@@ -23,32 +18,19 @@ function normalizeWslShell(shell?: string): AiShell {
   return 'bash'
 }
 
-function buildRuntimeSessionName(projectPath: string, cli?: 'claude' | 'codex'): string {
+function buildRuntimeSessionName(projectPath: string, cli?: 'claude' | 'codex' | 'codebuddy'): string {
   const normalizedCli = normalizeRuntimeCli(cli)
   const wslPath = wslBridge.toWslPath(projectPath)
   if (normalizedCli === 'codex') {
     const legacyMd5 = createHash('md5').update(wslPath).digest('hex').slice(0, 6)
     return `${basename(projectPath)}-${legacyMd5}`
   }
-  const cliAwareMd5 = createHash('md5')
-    .update(`${normalizedCli}:${wslPath}`)
-    .digest('hex')
-    .slice(0, 6)
+  const cliAwareMd5 = createHash('md5').update(`${normalizedCli}:${wslPath}`).digest('hex').slice(0, 6)
   return `${basename(projectPath)}-${normalizedCli}-${cliAwareMd5}`
 }
 
-function buildManagedRuntimeCommand(
-  projectPath: string,
-  input: Parameters<AiExecutionProvider['resolveRuntimeLaunch']>[1],
-  context: ProviderContext,
-): string {
-  const sessionName = buildProfileAwareSessionName(
-    projectPath,
-    input.profile,
-    input.cli,
-    buildRuntimeSessionName,
-    wslBridge.toWslPath(projectPath),
-  )
+function buildManagedRuntimeCommand(projectPath: string, input: Parameters<AiExecutionProvider['resolveRuntimeLaunch']>[1], context: ProviderContext): string {
+  const sessionName = buildProfileAwareSessionName(projectPath, input.profile, input.cli, buildRuntimeSessionName, wslBridge.toWslPath(projectPath))
   const projectWslPath = wslBridge.toWslPath(projectPath)
   const commandLine = buildProfileCommandLine(input.profile, input.cli, projectWslPath)
   const launchEnv = buildRuntimeProfileEnv({
@@ -60,11 +42,7 @@ function buildManagedRuntimeCommand(
     commandLine,
   })
   const envPrefix = buildEnvPrefix(launchEnv)
-  const tmuxCommand = tmuxManager.attachOrCreateCommand(
-    sessionName,
-    `cd '${quoteBashSingle(projectWslPath)}' && ${envPrefix} exec ${commandLine}`,
-    projectWslPath
-  )
+  const tmuxCommand = tmuxManager.attachOrCreateCommand(sessionName, `cd '${quoteBashSingle(projectWslPath)}' && ${envPrefix} exec ${commandLine}`, projectWslPath)
   return `exec bash -ilc '${quoteBashSingle(tmuxCommand)}'`
 }
 
@@ -99,27 +77,14 @@ export const windowsWslProvider: AiExecutionProvider = {
   },
 
   async resolveRuntimeLaunch(context, input) {
-    const sessionName = buildProfileAwareSessionName(
-      input.projectPath,
-      input.profile,
-      input.cli,
-      buildRuntimeSessionName,
-      wslBridge.toWslPath(input.projectPath),
-    )
+    const sessionName = buildProfileAwareSessionName(input.projectPath, input.profile, input.cli, buildRuntimeSessionName, wslBridge.toWslPath(input.projectPath))
     return {
       mode: 'windows-wsl',
       sessionName,
       providerLabel: this.label,
       supportsManagedSessions: true,
       startCommand: 'wsl.exe',
-      startArgs: [
-        '-d',
-        context.config.wslDistro || context.capability.wslDistro || 'Ubuntu',
-        '--',
-        'bash',
-        '-lc',
-        buildManagedRuntimeCommand(input.projectPath, input, context),
-      ],
+      startArgs: ['-d', context.config.wslDistro || context.capability.wslDistro || 'Ubuntu', '--', 'bash', '-lc', buildManagedRuntimeCommand(input.projectPath, input, context)],
       detached: true,
       windowsHide: true,
       shell: false,
@@ -147,28 +112,13 @@ export const windowsWslProvider: AiExecutionProvider = {
     const preferredPwsh = quoteBashSingle(input.cliConfig.wslPwshPath)
     const quoted = quotedArgs.map((item) => `'${quoteBashSingle(item)}'`).join(' ')
     const wslTargetPath = wslBridge.toWslPath(input.repoRoot)
-    const command = [
-      'set -euo pipefail',
-      `cd '${quoteBashSingle(wslTargetPath)}'`,
-      `if [ -x '${preferredPwsh}' ]; then`,
-      `  exec '${preferredPwsh}' ${quoted}`,
-      'else',
-      `  exec pwsh ${quoted}`,
-      'fi',
-    ].join('\n')
+    const command = ['set -euo pipefail', `cd '${quoteBashSingle(wslTargetPath)}'`, `if [ -x '${preferredPwsh}' ]; then`, `  exec '${preferredPwsh}' ${quoted}`, 'else', `  exec pwsh ${quoted}`, 'fi'].join('\n')
 
     return {
       mode: 'windows-wsl',
       providerLabel: this.label,
       command: 'wsl.exe',
-      args: [
-        '-d',
-        context.config.wslDistro || context.capability.wslDistro || 'Ubuntu',
-        '--',
-        'bash',
-        '-lc',
-        command,
-      ],
+      args: ['-d', context.config.wslDistro || context.capability.wslDistro || 'Ubuntu', '--', 'bash', '-lc', command],
       cwd: input.repoRoot,
       shell: false,
       outputLabel: 'wsl-pwsh',
@@ -176,7 +126,7 @@ export const windowsWslProvider: AiExecutionProvider = {
   },
 
   async listRuntimeSessions(): Promise<RuntimeSessionInfo[]> {
-    if (!await wslBridge.hasTmux()) return []
+    if (!(await wslBridge.hasTmux())) return []
     const sessions = await tmuxManager.listLauncherSessions()
     return sessions.map((item) => ({
       sessionName: item.sessionName,
@@ -188,7 +138,7 @@ export const windowsWslProvider: AiExecutionProvider = {
   },
 
   async stopRuntimeSession(_context, sessionName: string): Promise<boolean> {
-    if (!await wslBridge.hasTmux()) return false
+    if (!(await wslBridge.hasTmux())) return false
     return tmuxManager.killSession(sessionName)
   },
 }

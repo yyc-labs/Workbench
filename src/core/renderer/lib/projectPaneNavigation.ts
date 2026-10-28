@@ -1,4 +1,4 @@
-export const PROJECT_DETAIL_GESTURE_PANE_ORDER = ['code', 'aicommit', 'transcript'] as const
+export const PROJECT_DETAIL_GESTURE_PANE_ORDER = ['code', 'aicommit', 'transcript', 'sessions'] as const
 
 export type ProjectDetailGestureDirection = 'back' | 'forward'
 
@@ -13,10 +13,7 @@ function normalizeProjectDetailGesturePane(segment: string | undefined): Project
   return null
 }
 
-export function resolveProjectDetailGestureTarget(
-  pathname: string,
-  direction: ProjectDetailGestureDirection
-): string | null {
+export function resolveProjectDetailGestureTarget(pathname: string, direction: ProjectDetailGestureDirection): string | null {
   const segments = pathname.split('/').filter(Boolean)
   if (segments[0] !== 'project' || segments.length < 2) return null
 
@@ -25,9 +22,7 @@ export function resolveProjectDetailGestureTarget(
   if (!projectId || !currentPane) return null
 
   const currentIndex = PROJECT_DETAIL_GESTURE_PANE_ORDER.indexOf(currentPane)
-  const nextPane = direction === 'forward'
-    ? PROJECT_DETAIL_GESTURE_PANE_ORDER[currentIndex + 1]
-    : PROJECT_DETAIL_GESTURE_PANE_ORDER[currentIndex - 1]
+  const nextPane = direction === 'forward' ? PROJECT_DETAIL_GESTURE_PANE_ORDER[currentIndex + 1] : PROJECT_DETAIL_GESTURE_PANE_ORDER[currentIndex - 1]
 
   return nextPane ? `/project/${projectId}/${nextPane}` : null
 }

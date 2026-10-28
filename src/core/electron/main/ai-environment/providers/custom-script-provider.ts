@@ -2,23 +2,14 @@ import { spawnSync } from 'child_process'
 import { createHash } from 'crypto'
 import { homedir } from 'os'
 import { basename } from 'path'
+import { isLikelyWslEntrypointPath, shouldUseWslForRuntimeEntrypoint } from '../../../../shared/runtimeEntrypoint'
 import type { AiEnvironmentConfig, AiExecutionMode, AiRuntimeProfile, RuntimeDiagnostics, RuntimeSessionInfo } from '../../../../shared/types'
-import {
-  isLikelyWslEntrypointPath,
-  shouldUseWslForRuntimeEntrypoint,
-} from '../../../../shared/runtimeEntrypoint'
 import { normalizeWindowsHostPath } from '../../host-path'
-import type { AiExecutionProvider } from '../provider-types'
-import { wslBridge } from '../../wsl-bridge'
-import { tmuxManager } from '../../tmux-manager'
 import { buildWindowsTerminalShellLaunch } from '../../shell/windows-shell'
-import {
-  buildEnvPrefix,
-  buildProfileAwareSessionName,
-  buildProfileCommandLine,
-  buildRuntimeProfileEnv,
-  quoteWindowsShellArg,
-} from '../runtime-profile-launch'
+import { tmuxManager } from '../../tmux-manager'
+import { wslBridge } from '../../wsl-bridge'
+import type { AiExecutionProvider } from '../provider-types'
+import { buildEnvPrefix, buildProfileAwareSessionName, buildProfileCommandLine, buildRuntimeProfileEnv, quoteWindowsShellArg } from '../runtime-profile-launch'
 
 function quoteBashSingle(input: string): string {
   return input.replace(/'/g, "'\\''")
@@ -49,17 +40,10 @@ async function resolveWslHome(hasWsl: boolean, wslHome?: string): Promise<string
   }
 }
 
-async function resolveCustomEntrypoint(
-  pathValue: string | undefined,
-  hostPlatform: 'windows' | 'linux' | 'macos',
-  hasWsl: boolean,
-  wslHome?: string,
-): Promise<string> {
+async function resolveCustomEntrypoint(pathValue: string | undefined, hostPlatform: 'windows' | 'linux' | 'macos', hasWsl: boolean, wslHome?: string): Promise<string> {
   const normalized = pathValue?.trim() || ''
   if (!normalized) return ''
-  const homeDir = hostPlatform === 'windows'
-    ? await resolveWslHome(hasWsl, wslHome)
-    : process.env.HOME || homedir()
+  const homeDir = hostPlatform === 'windows' ? await resolveWslHome(hasWsl, wslHome) : process.env.HOME || homedir()
   return expandHomeRelativePath(normalized, homeDir)
 }
 
@@ -108,12 +92,7 @@ function checkPosixEntrypoint(pathValue: string): { exists: boolean; executable:
   }
 }
 
-function resolveProjectPathArg(
-  projectPath: string,
-  hostPlatform: 'windows' | 'linux' | 'macos',
-  targetEnvironment: 'host' | 'wsl',
-  wslDistro?: string
-): string {
+function resolveProjectPathArg(projectPath: string, hostPlatform: 'windows' | 'linux' | 'macos', targetEnvironment: 'host' | 'wsl', wslDistro?: string): string {
   if (hostPlatform === 'windows') {
     if (targetEnvironment === 'wsl') return wslBridge.toWslPath(projectPath)
     return normalizeWindowsHostPath(projectPath, wslDistro)
@@ -121,16 +100,14 @@ function resolveProjectPathArg(
   return projectPath
 }
 
-function normalizeRuntimeCli(cli?: 'claude' | 'codex'): 'claude' | 'codex' {
+function normalizeRuntimeCli(cli?: 'claude' | 'codex' | 'codebuddy'): 'claude' | 'codex' | 'codebuddy' {
+  if (cli === 'codebuddy') return 'codebuddy'
   return cli === 'codex' ? 'codex' : 'claude'
 }
 
-function buildSessionHint(projectPath: string, cli?: 'claude' | 'codex'): string {
+function buildSessionHint(projectPath: string, cli?: 'claude' | 'codex' | 'codebuddy'): string {
   const normalizedCli = normalizeRuntimeCli(cli)
-  const hash = createHash('md5')
-    .update(`${normalizedCli}:${projectPath}`)
-    .digest('hex')
-    .slice(0, 6)
+  const hash = createHash('md5').update(`${normalizedCli}:${projectPath}`).digest('hex').slice(0, 6)
   return `${basename(projectPath)}-${normalizedCli}-${hash}`
 }
 
@@ -147,16 +124,8 @@ function buildRuntimeLaunchEnv(input: Parameters<AiExecutionProvider['resolveRun
   }
 }
 
-function buildRuntimeScriptArgs(
-  input: Parameters<AiExecutionProvider['resolveRuntimeLaunch']>[1],
-  resolvedProjectPath: string,
-  passProjectPath: boolean,
-): string[] {
-  return [
-    ...(passProjectPath ? [resolvedProjectPath] : []),
-    '--cli',
-    normalizeRuntimeCli(input.cli),
-  ]
+function buildRuntimeScriptArgs(input: Parameters<AiExecutionProvider['resolveRuntimeLaunch']>[1], resolvedProjectPath: string, passProjectPath: boolean): string[] {
+  return [...(passProjectPath ? [resolvedProjectPath] : []), '--cli', normalizeRuntimeCli(input.cli)]
 }
 
 function getCustomProfileCommand(profile?: AiRuntimeProfile | null): string {
@@ -166,13 +135,10 @@ function getCustomProfileCommand(profile?: AiRuntimeProfile | null): string {
 function buildBashWrappedExec(entrypoint: string, args: string[], env?: Record<string, string>): string {
   const envPrefix = env
     ? Object.entries(env)
-      .map(([key, value]) => `${key}='${quoteBashSingle(value)}'`)
-      .join(' ')
+        .map(([key, value]) => `${key}='${quoteBashSingle(value)}'`)
+        .join(' ')
     : ''
-  const argv = [
-    quotePosixPathForShell(entrypoint),
-    ...args.map((item) => `'${quoteBashSingle(item)}'`),
-  ].join(' ')
+  const argv = [quotePosixPathForShell(entrypoint), ...args.map((item) => `'${quoteBashSingle(item)}'`)].join(' ')
   return envPrefix ? `${envPrefix} exec ${argv}` : `exec ${argv}`
 }
 
@@ -190,14 +156,7 @@ function buildAiCommitScriptArgs(input: Parameters<AiExecutionProvider['resolveA
 }
 
 function buildPowerShellFileArgs(scriptPath: string, input: Parameters<AiExecutionProvider['resolveAiCommitLaunch']>[1]): string[] {
-  return [
-    '-NoProfile',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-File',
-    scriptPath,
-    ...buildAiCommitScriptArgs(input),
-  ]
+  return ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, ...buildAiCommitScriptArgs(input)]
 }
 
 function resolveHostTmuxMode(hostPlatform: 'windows' | 'linux' | 'macos'): AiExecutionMode {
@@ -227,58 +186,24 @@ function listPosixTmuxSessions(mode: AiExecutionMode): RuntimeSessionInfo[] {
     })
 }
 
-function buildWslPwshCommand(
-  scriptPath: string,
-  repoRoot: string,
-  input: Parameters<AiExecutionProvider['resolveAiCommitLaunch']>[1],
-): string {
-  const quotedArgs = [
-    "'-NoProfile'",
-    "'-ExecutionPolicy'",
-    "'Bypass'",
-    "'-File'",
-    quotePosixPathForShell(scriptPath),
-    ...buildAiCommitScriptArgs(input).map((item) => `'${quoteBashSingle(item)}'`),
-  ].join(' ')
+function buildWslPwshCommand(scriptPath: string, repoRoot: string, input: Parameters<AiExecutionProvider['resolveAiCommitLaunch']>[1]): string {
+  const quotedArgs = ["'-NoProfile'", "'-ExecutionPolicy'", "'Bypass'", "'-File'", quotePosixPathForShell(scriptPath), ...buildAiCommitScriptArgs(input).map((item) => `'${quoteBashSingle(item)}'`)].join(' ')
   const preferredPwsh = quoteBashSingle(input.cliConfig.wslPwshPath)
-  return [
-    'set -euo pipefail',
-    `cd '${quoteBashSingle(repoRoot)}'`,
-    `if [ -x '${preferredPwsh}' ]; then`,
-    `  exec '${preferredPwsh}' ${quotedArgs}`,
-    'else',
-    `  exec pwsh ${quotedArgs}`,
-    'fi',
-  ].join('\n')
+  return ['set -euo pipefail', `cd '${quoteBashSingle(repoRoot)}'`, `if [ -x '${preferredPwsh}' ]; then`, `  exec '${preferredPwsh}' ${quotedArgs}`, 'else', `  exec pwsh ${quotedArgs}`, 'fi'].join('\n')
 }
 
-function buildProfileTerminalCommand(
-  resolvedProjectPath: string,
-  launchEnv: Record<string, string>,
-  commandLine: string,
-): string {
-  return [
-    `cd '${quoteBashSingle(resolvedProjectPath)}'`,
-    `${buildEnvPrefix(launchEnv)} ${commandLine}; exec bash -i`,
-  ].join(' && ')
+function buildProfileTerminalCommand(resolvedProjectPath: string, launchEnv: Record<string, string>, commandLine: string): string {
+  return [`cd '${quoteBashSingle(resolvedProjectPath)}'`, `${buildEnvPrefix(launchEnv)} ${commandLine}; exec bash -i`].join(' && ')
 }
 
 function quoteAppleScriptString(input: string): string {
   return input.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
-function buildPosixTerminalProfileLaunch(
-  hostPlatform: 'linux' | 'macos',
-  command: string,
-): { startCommand: string; startArgs: string[] } {
+function buildPosixTerminalProfileLaunch(hostPlatform: 'linux' | 'macos', command: string): { startCommand: string; startArgs: string[] } {
   if (hostPlatform === 'macos') {
     const bashCommand = `bash -ilc '${quoteBashSingle(command)}'`
-    const appleScript = [
-      'tell application "Terminal"',
-      'activate',
-      `do script "${quoteAppleScriptString(bashCommand)}"`,
-      'end tell',
-    ]
+    const appleScript = ['tell application "Terminal"', 'activate', `do script "${quoteAppleScriptString(bashCommand)}"`, 'end tell']
     return {
       startCommand: 'osascript',
       startArgs: appleScript.flatMap((line) => ['-e', line]),
@@ -334,14 +259,7 @@ export const customScriptProvider: AiExecutionProvider = {
     }
 
     const rawEntrypoint = context.config.runtimeEntrypoint?.trim()
-    const expandedEntrypoint = rawEntrypoint
-      ? await resolveCustomEntrypoint(
-        rawEntrypoint,
-        context.capability.hostPlatform,
-        context.capability.hasWsl,
-        context.capability.wslEnv?.HOME,
-      )
-      : undefined
+    const expandedEntrypoint = rawEntrypoint ? await resolveCustomEntrypoint(rawEntrypoint, context.capability.hostPlatform, context.capability.hasWsl, context.capability.wslEnv?.HOME) : undefined
     const useWslEntrypoint = shouldUseWslForConfigEntrypoint(context.config)
     let launcherScriptExists: boolean | undefined
     let launcherScriptExecutable: boolean | undefined
@@ -354,9 +272,7 @@ export const customScriptProvider: AiExecutionProvider = {
       } else {
         try {
           const shellPath = quotePosixPathForShell(expandedEntrypoint)
-          const flags = await wslBridge.exec(
-            `[ -e ${shellPath} ] && [ -x ${shellPath} ] && echo EXISTS_EXEC || ([ -e ${shellPath} ] && echo EXISTS_NOEXEC) || echo MISSING`
-          )
+          const flags = await wslBridge.exec(`[ -e ${shellPath} ] && [ -x ${shellPath} ] && echo EXISTS_EXEC || ([ -e ${shellPath} ] && echo EXISTS_NOEXEC) || echo MISSING`)
           launcherScriptExists = flags.includes('EXISTS_EXEC') || flags.includes('EXISTS_NOEXEC')
           launcherScriptExecutable = flags.includes('EXISTS_EXEC')
           if (flags.includes('EXISTS_NOEXEC')) {
@@ -403,62 +319,21 @@ export const customScriptProvider: AiExecutionProvider = {
       throw new Error(`Runtime profile command is not configured: ${input.profile.name}`)
     }
     const rawEntrypoint = context.config.runtimeEntrypoint?.trim()
-    const entrypoint = profileCommand || (rawEntrypoint
-      ? await resolveCustomEntrypoint(
-        rawEntrypoint,
-        context.capability.hostPlatform,
-        context.capability.hasWsl,
-      context.capability.wslEnv?.HOME,
-      )
-      : '')
-    const targetEnvironment: 'host' | 'wsl' =
-      context.capability.hostPlatform === 'windows'
-        && (
-          profileCommand
-            ? isLikelyWslEntrypointPath(entrypoint)
-            : shouldUseWslForConfigEntrypoint(context.config)
-        )
-        ? 'wsl'
-        : 'host'
-    const resolvedProjectPath = resolveProjectPathArg(
-      input.projectPath,
-      context.capability.hostPlatform,
-      targetEnvironment,
-      context.config.wslDistro || context.capability.wslDistro,
-    )
-    const startArgs = profileCommand
-      ? []
-      : buildRuntimeScriptArgs(
-        input,
-        resolvedProjectPath,
-        Boolean(context.config.runtimePassProjectPath),
-      )
-    const commandLine = profileCommand
-      ? buildProfileCommandLine(
-        input.profile,
-        input.cli,
-        resolvedProjectPath,
-        context.capability.hostPlatform === 'windows' && targetEnvironment === 'host'
-          ? quoteWindowsShellArg
-          : undefined,
-      )
-      : buildBashWrappedExec(entrypoint, startArgs)
-    const sessionHint = buildProfileAwareSessionName(
-      input.projectPath,
-      input.profile,
-      input.cli,
-      buildSessionHint,
-      resolvedProjectPath,
-    )
+    const entrypoint = profileCommand || (rawEntrypoint ? await resolveCustomEntrypoint(rawEntrypoint, context.capability.hostPlatform, context.capability.hasWsl, context.capability.wslEnv?.HOME) : '')
+    const targetEnvironment: 'host' | 'wsl' = context.capability.hostPlatform === 'windows' && (profileCommand ? isLikelyWslEntrypointPath(entrypoint) : shouldUseWslForConfigEntrypoint(context.config)) ? 'wsl' : 'host'
+    const resolvedProjectPath = resolveProjectPathArg(input.projectPath, context.capability.hostPlatform, targetEnvironment, context.config.wslDistro || context.capability.wslDistro)
+    const startArgs = profileCommand ? [] : buildRuntimeScriptArgs(input, resolvedProjectPath, Boolean(context.config.runtimePassProjectPath))
+    const commandLine = profileCommand ? buildProfileCommandLine(input.profile, input.cli, resolvedProjectPath, context.capability.hostPlatform === 'windows' && targetEnvironment === 'host' ? quoteWindowsShellArg : undefined) : buildBashWrappedExec(entrypoint, startArgs)
+    const sessionHint = buildProfileAwareSessionName(input.projectPath, input.profile, input.cli, buildSessionHint, resolvedProjectPath)
     const launchEnv = profileCommand
       ? buildRuntimeProfileEnv({
-        profile: input.profile,
-        fallbackCli: input.cli,
-        projectPath: input.projectPath,
-        resolvedProjectPath,
-        sessionName: sessionHint,
-        commandLine,
-      })
+          profile: input.profile,
+          fallbackCli: input.cli,
+          projectPath: input.projectPath,
+          resolvedProjectPath,
+          sessionName: sessionHint,
+          commandLine,
+        })
       : buildRuntimeLaunchEnv(input, resolvedProjectPath)
 
     if (!entrypoint) {
@@ -476,19 +351,7 @@ export const customScriptProvider: AiExecutionProvider = {
         providerLabel: this.label,
         supportsManagedSessions: false,
         startCommand: 'cmd.exe',
-        startArgs: [
-          '/d',
-          '/c',
-          'start',
-          title,
-          'wsl.exe',
-          '-d',
-          context.config.wslDistro || context.capability.wslDistro || 'Ubuntu',
-          '--',
-          'bash',
-          '-ilc',
-          buildProfileTerminalCommand(resolvedProjectPath, launchEnv, commandLine),
-        ],
+        startArgs: ['/d', '/c', 'start', title, 'wsl.exe', '-d', context.config.wslDistro || context.capability.wslDistro || 'Ubuntu', '--', 'bash', '-ilc', buildProfileTerminalCommand(resolvedProjectPath, launchEnv, commandLine)],
         env: launchEnv,
         shell: false,
         windowsHide: true,
@@ -508,14 +371,7 @@ export const customScriptProvider: AiExecutionProvider = {
         providerLabel: this.label,
         supportsManagedSessions: false,
         startCommand: 'wsl.exe',
-        startArgs: [
-          '-d',
-          context.config.wslDistro || context.capability.wslDistro || 'Ubuntu',
-          '--',
-          'bash',
-          '-ilc',
-          buildBashWrappedExec(entrypoint, startArgs, launchEnv),
-        ],
+        startArgs: ['-d', context.config.wslDistro || context.capability.wslDistro || 'Ubuntu', '--', 'bash', '-ilc', buildBashWrappedExec(entrypoint, startArgs, launchEnv)],
         env: launchEnv,
         shell: false,
         windowsHide: true,
@@ -526,10 +382,7 @@ export const customScriptProvider: AiExecutionProvider = {
     }
 
     if (profileCommand && (context.capability.hostPlatform === 'linux' || context.capability.hostPlatform === 'macos')) {
-      const terminalLaunch = buildPosixTerminalProfileLaunch(
-        context.capability.hostPlatform,
-        buildProfileTerminalCommand(resolvedProjectPath, launchEnv, commandLine),
-      )
+      const terminalLaunch = buildPosixTerminalProfileLaunch(context.capability.hostPlatform, buildProfileTerminalCommand(resolvedProjectPath, launchEnv, commandLine))
       return {
         mode: 'custom-script',
         sessionName: sessionHint,
@@ -573,14 +426,7 @@ export const customScriptProvider: AiExecutionProvider = {
         providerLabel: this.label,
         supportsManagedSessions: false,
         startCommand: 'cmd.exe',
-        startArgs: [
-          '/d',
-          '/c',
-          'start',
-          title,
-          terminalLaunch.shell.command,
-          ...terminalLaunch.args,
-        ],
+        startArgs: ['/d', '/c', 'start', title, terminalLaunch.shell.command, ...terminalLaunch.args],
         cwd: resolvedProjectPath,
         env: launchEnv,
         shell: false,
@@ -608,18 +454,9 @@ export const customScriptProvider: AiExecutionProvider = {
 
   async resolveAiCommitLaunch(context, input) {
     const rawEntrypoint = context.config.aiCommitEntrypoint?.trim()
-    const entrypoint = rawEntrypoint
-      ? await resolveCustomEntrypoint(
-        rawEntrypoint,
-        context.capability.hostPlatform,
-        context.capability.hasWsl,
-        context.capability.wslEnv?.HOME,
-      )
-      : input.scriptPath
+    const entrypoint = rawEntrypoint ? await resolveCustomEntrypoint(rawEntrypoint, context.capability.hostPlatform, context.capability.hasWsl, context.capability.wslEnv?.HOME) : input.scriptPath
     const scriptArgs = buildAiCommitScriptArgs(input)
-    const hostRepoRoot = context.capability.hostPlatform === 'windows'
-      ? normalizeWindowsHostPath(input.repoRoot, context.capability.wslDistro)
-      : input.repoRoot
+    const hostRepoRoot = context.capability.hostPlatform === 'windows' ? normalizeWindowsHostPath(input.repoRoot, context.capability.wslDistro) : input.repoRoot
 
     if (context.capability.hostPlatform === 'windows' && isLikelyWslEntrypointPath(entrypoint)) {
       if (!context.capability.hasWsl) {
@@ -627,26 +464,13 @@ export const customScriptProvider: AiExecutionProvider = {
       }
 
       const repoRootWslPath = wslBridge.toWslPath(input.repoRoot)
-      const command = isPowerShellScript(entrypoint)
-        ? buildWslPwshCommand(entrypoint, repoRootWslPath, input)
-        : [
-          'set -euo pipefail',
-          `cd '${quoteBashSingle(repoRootWslPath)}'`,
-          buildBashWrappedExec(entrypoint, scriptArgs),
-        ].join('\n')
+      const command = isPowerShellScript(entrypoint) ? buildWslPwshCommand(entrypoint, repoRootWslPath, input) : ['set -euo pipefail', `cd '${quoteBashSingle(repoRootWslPath)}'`, buildBashWrappedExec(entrypoint, scriptArgs)].join('\n')
 
       return {
         mode: 'custom-script',
         providerLabel: this.label,
         command: 'wsl.exe',
-        args: [
-          '-d',
-          context.config.wslDistro || context.capability.wslDistro || 'Ubuntu',
-          '--',
-          'bash',
-          '-lc',
-          command,
-        ],
+        args: ['-d', context.config.wslDistro || context.capability.wslDistro || 'Ubuntu', '--', 'bash', '-lc', command],
         cwd: hostRepoRoot,
         shell: false,
         outputLabel: isPowerShellScript(entrypoint) ? 'custom-script-wsl-pwsh' : 'custom-script-wsl',
@@ -661,12 +485,13 @@ export const customScriptProvider: AiExecutionProvider = {
         args: buildPowerShellFileArgs(entrypoint, input),
         cwd: hostRepoRoot,
         shell: false,
-        env: context.capability.hostPlatform === 'windows'
-          ? undefined
-          : {
-            LANG: 'C.UTF-8',
-            LC_ALL: 'C.UTF-8',
-          },
+        env:
+          context.capability.hostPlatform === 'windows'
+            ? undefined
+            : {
+                LANG: 'C.UTF-8',
+                LC_ALL: 'C.UTF-8',
+              },
         outputLabel: 'custom-script-pwsh',
       }
     }
@@ -712,7 +537,7 @@ export const customScriptProvider: AiExecutionProvider = {
 
   async listRuntimeSessions(context): Promise<RuntimeSessionInfo[]> {
     if (context.capability.hostPlatform === 'windows' && context.capability.hasWsl) {
-      if (!await wslBridge.hasTmux()) return []
+      if (!(await wslBridge.hasTmux())) return []
       const sessions = await tmuxManager.listLauncherSessions()
       return sessions.map((item) => ({
         sessionName: item.sessionName,
@@ -732,7 +557,7 @@ export const customScriptProvider: AiExecutionProvider = {
 
   async stopRuntimeSession(context, sessionName: string): Promise<boolean> {
     if (context.capability.hostPlatform === 'windows' && context.capability.hasWsl) {
-      if (!await wslBridge.hasTmux()) return false
+      if (!(await wslBridge.hasTmux())) return false
       return tmuxManager.killSession(sessionName)
     }
 

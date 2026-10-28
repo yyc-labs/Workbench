@@ -1,26 +1,16 @@
+import { spawnSync } from 'child_process'
 import { createHash } from 'crypto'
 import { basename } from 'path'
-import { spawnSync } from 'child_process'
-import type {
-  AiExecutionMode,
-  AiShell,
-  RuntimeDiagnostics,
-  RuntimeSessionInfo,
-} from '../../../../shared/types'
+import type { AiExecutionMode, AiShell, RuntimeDiagnostics, RuntimeSessionInfo } from '../../../../shared/types'
 import type { AiExecutionProvider, ProviderContext } from '../provider-types'
-import {
-  buildEnvPrefix,
-  buildProfileAwareSessionName,
-  buildProfileCommandLine,
-  buildRuntimeProfileEnv,
-  quoteBashSingle,
-} from '../runtime-profile-launch'
+import { buildEnvPrefix, buildProfileAwareSessionName, buildProfileCommandLine, buildRuntimeProfileEnv, quoteBashSingle } from '../runtime-profile-launch'
 
-function normalizeRuntimeCli(cli?: 'claude' | 'codex'): 'claude' | 'codex' {
+function normalizeRuntimeCli(cli?: 'claude' | 'codex' | 'codebuddy'): 'claude' | 'codex' | 'codebuddy' {
+  if (cli === 'codebuddy') return 'codebuddy'
   return cli === 'codex' ? 'codex' : 'claude'
 }
 
-function buildRuntimeSessionName(projectPath: string, cli?: 'claude' | 'codex'): string {
+function buildRuntimeSessionName(projectPath: string, cli?: 'claude' | 'codex' | 'codebuddy'): string {
   const normalizedCli = normalizeRuntimeCli(cli)
   const hash = createHash('md5').update(`${normalizedCli}:${projectPath}`).digest('hex').slice(0, 6)
   return `${basename(projectPath)}-${normalizedCli}-${hash}`
@@ -89,12 +79,7 @@ export const posixNativeProvider: AiExecutionProvider = {
 
   async resolveRuntimeLaunch(context, input) {
     const shell = shellExecutable(context)
-    const sessionName = buildProfileAwareSessionName(
-      input.projectPath,
-      input.profile,
-      input.cli,
-      buildRuntimeSessionName,
-    )
+    const sessionName = buildProfileAwareSessionName(input.projectPath, input.profile, input.cli, buildRuntimeSessionName)
     const commandLine = buildProfileCommandLine(input.profile, input.cli, input.projectPath)
     const launchEnv = buildRuntimeProfileEnv({
       profile: input.profile,
@@ -105,10 +90,7 @@ export const posixNativeProvider: AiExecutionProvider = {
       commandLine,
     })
     const envPrefix = buildEnvPrefix(launchEnv)
-    const tmuxCommand = [
-      `cd '${quoteBashSingle(input.projectPath)}'`,
-      `exec tmux new-session -A -s '${sessionName}' '${quoteBashSingle(`${envPrefix} exec ${commandLine}`)}'`,
-    ].join(' && ')
+    const tmuxCommand = [`cd '${quoteBashSingle(input.projectPath)}'`, `exec tmux new-session -A -s '${sessionName}' '${quoteBashSingle(`${envPrefix} exec ${commandLine}`)}'`].join(' && ')
     return {
       mode: resolveMode(context),
       sessionName,

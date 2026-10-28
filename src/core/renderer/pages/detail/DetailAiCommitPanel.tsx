@@ -1,25 +1,24 @@
-import { type Dispatch, type MouseEvent as ReactMouseEvent, type MutableRefObject, type SetStateAction } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type Dispatch, type MutableRefObject, type MouseEvent as ReactMouseEvent, type SetStateAction, useCallback, useEffect, useMemo, useState } from 'react'
 import type { AiCommitUndoState } from '../../../shared/types'
-import { toast } from '../../components/ui/toast'
 import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
+import { toast } from '../../components/ui/toast'
 import { useI18n } from '../../i18n'
 import { DetailAiCommitBranchManagerModal } from './DetailAiCommitBranchManagerModal'
 import { DetailAiCommitBranchPanel } from './DetailAiCommitBranchPanel'
 import { DetailAiCommitCommitModal } from './DetailAiCommitCommitModal'
 import { DetailAiCommitGitGuideModal } from './DetailAiCommitGitGuideModal'
-import { DetailGitStatusOptimizationModal, GitStatusOptimizationTrigger } from './DetailGitStatusOptimizationModal'
 import { DetailAiCommitHeader } from './DetailAiCommitHeader'
 import { DetailAiCommitMiddlePanel } from './DetailAiCommitMiddlePanel'
 import { DetailAiCommitOperationConfirmModal } from './DetailAiCommitOperationConfirmModal'
 import { DetailAiCommitWorkingTreePanel } from './DetailAiCommitWorkingTreePanel'
-import { DetailGitRepositorySelector } from './DetailGitRepositorySelector'
-import { buildCommitHistoryDisplayItems } from './detail.commitHistory'
-import { beginGitTraceTiming, endGitTraceTiming } from './gitTrace'
-import type { IndexedBranchCandidate, MiddlePanelMode, OperationConfirmState, ProjectLinkItem } from './detail.aiCommitPanel.types'
-import { computeOperationState, getGitOperationItems, PanelGitOperationKind, type OperationCardState } from './detail.gitOperations'
 import { DetailGitDiffDrawer } from './DetailGitDiffDrawer'
+import { DetailGitRepositorySelector } from './DetailGitRepositorySelector'
+import { DetailGitStatusOptimizationModal, GitStatusOptimizationTrigger } from './DetailGitStatusOptimizationModal'
+import type { IndexedBranchCandidate, MiddlePanelMode, OperationConfirmState, ProjectLinkItem } from './detail.aiCommitPanel.types'
+import { buildCommitHistoryDisplayItems } from './detail.commitHistory'
+import { computeOperationState, getGitOperationItems, type OperationCardState, type PanelGitOperationKind } from './detail.gitOperations'
 import type { AiCommitStatus, AiFlowNode, DetailGitRepositorySummary, DetailGitSnapshot, GitOperationResult, GitSetFileStageResult } from './detail.types'
+import { beginGitTraceTiming, endGitTraceTiming } from './gitTrace'
 import { useDetailBranchManagerState } from './useDetailBranchManagerState'
 import { useDetailGitDiffState } from './useDetailGitDiffState'
 import { useGitWorkflowRunner } from './useGitWorkflowRunner'
@@ -40,6 +39,7 @@ type DetailAiCommitPanelProps = {
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
   onOpenStartupLogs?: () => void
   onOpenTranscript?: () => void
+  onOpenSessions?: () => void
   onOpenProjectLinksManager?: () => void
   jumpToAiLogToken: number
   flowNodes: AiFlowNode[]
@@ -106,6 +106,7 @@ function DetailAiCommitPanel({
   onStartAndOpenDevUrl,
   onOpenStartupLogs,
   onOpenTranscript,
+  onOpenSessions,
   onOpenProjectLinksManager,
   jumpToAiLogToken,
   flowNodes,
@@ -840,6 +841,7 @@ function DetailAiCommitPanel({
             onAiAutoCommitContextMenu={onAiAutoCommitContextMenu}
             onCancelAiCommit={onCancelAiCommit}
             onOpenTranscript={onOpenTranscript}
+            onOpenSessions={onOpenSessions}
             onPreloadPane={onPreloadPane}
             onStartAndOpenDevUrl={onStartAndOpenDevUrl}
             onOpenStartupLogs={onOpenStartupLogs}

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef } from 'react'
 import type { AiCommitConfig } from '../../../shared/types'
 import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
-import { useAppStore } from '../../stores/appStore'
 import { useI18n } from '../../i18n'
 import { detectProjectEnvironment } from '../../lib/projectEnvironment'
+import { useAppStore } from '../../stores/appStore'
 import { DetailAiCommitPanel } from './DetailAiCommitPanel'
 import type { ProjectLinkItem } from './detail.aiCommitPanel.types'
 import { useAiCommitFlow } from './useAiCommitFlow'
@@ -26,6 +26,7 @@ type DetailAiCommitPaneHostProps = {
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
   onOpenStartupLogs?: () => void
   onOpenTranscript: () => void
+  onOpenSessions: () => void
   onOpenProjectLinksManager: () => void
   onCloseProjectContextMenu: () => void
 }
@@ -48,6 +49,7 @@ export function DetailAiCommitPaneHost({
   onStartAndOpenDevUrl,
   onOpenStartupLogs,
   onOpenTranscript,
+  onOpenSessions,
   onOpenProjectLinksManager,
   onCloseProjectContextMenu,
 }: DetailAiCommitPaneHostProps) {
@@ -228,6 +230,7 @@ export function DetailAiCommitPaneHost({
         onStartAndOpenDevUrl={onStartAndOpenDevUrl}
         onOpenStartupLogs={onOpenStartupLogs}
         onOpenTranscript={onOpenTranscript}
+        onOpenSessions={onOpenSessions}
         onOpenProjectLinksManager={onOpenProjectLinksManager}
         jumpToAiLogToken={jumpToAiLogToken}
         flowNodes={flowNodes}

@@ -1,5 +1,6 @@
 import { contextBridge } from 'electron'
 import type { ElectronApi } from '../../shared/electronApi'
+import { createAgentHistoryInvokeApi } from './invokeApi.agentHistory'
 import { createAgentLogsInvokeApi } from './invokeApi.agentLogs'
 import { createAiConnectionInvokeApi } from './invokeApi.aiConnection'
 import { createAiGatewayInvokeApi } from './invokeApi.aiGateway'
@@ -31,6 +32,7 @@ const api = {
   ...createProjectFileInvokeApi(),
   ...createQuickActionsInvokeApi(),
   ...createCalendarInvokeApi(),
+  ...createAgentHistoryInvokeApi(),
   ...createProcessPortsInvokeApi(),
   ...createRunTaskInvokeApi(),
   ...createTranscriptInvokeApi(),

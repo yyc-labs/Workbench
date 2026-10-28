@@ -1,20 +1,20 @@
-import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronUp, ListTree, Play, RefreshCw, Square, TriangleAlert } from 'lucide-react'
+import { ArrowUpRight, ChevronLeft, ListTree, Play, RefreshCw, Square, TriangleAlert } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
 import { defaultAiRuntimeProfiles, getAiRuntimeProfileCli, getAiRuntimeProfileLabel, resolveAiRuntimeProfile, resolveProjectAiRuntimeProfileId } from '../../shared/aiRuntimeProfiles'
 import { getActiveRunTaskUrls, isPrimaryRunTaskUrlPending } from '../../shared/runTasks'
-import type { AiCommitStatus, AiCommitTaskSnapshot, CliTool } from '../../shared/types'
+import type { AiCommitStatus, CliTool } from '../../shared/types'
 import { CardContextMenu } from '../components/CardContextMenu'
 import { ProjectLinksTrigger } from '../components/ProjectLinksTrigger'
 import { ProjectMetaDialog } from '../components/ProjectMetaDialog'
-import { ProjectPaneTabs } from '../components/ProjectPaneTabs'
+import { ProjectPageShell, useProjectHeaderCollapsed } from '../components/ProjectPageShell'
 import { RunTasksDialog } from '../components/run-tasks/RunTasksDialog'
 import { UrlPopover } from '../components/UrlPopover'
 import { useOpenProjectTerminal } from '../hooks/useOpenProjectTerminal'
 import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
 import { useI18n, useLocale } from '../i18n'
-import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
+import { projectDisplayName } from '../lib/projectDisplay'
 import { detectProjectEnvironment, projectEnvironmentLabel } from '../lib/projectEnvironment'
 import { loadCodeWorkspacePanelModule, loadDetailAiCommitPaneHostModule, preloadProjectPane } from '../lib/projectPagePreload'
 import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
@@ -25,7 +25,6 @@ import { useProjectDocLinks } from './detail/useProjectDocLinks'
 const CodeWorkspacePanel = lazy(() => loadCodeWorkspacePanelModule().then((module) => ({ default: module.CodeWorkspacePanel })))
 const DetailAiCommitPaneHost = lazy(() => loadDetailAiCommitPaneHostModule().then((module) => ({ default: module.DetailAiCommitPaneHost })))
 
-const PROJECT_HEADER_COLLAPSED_STORAGE_KEY = 'app:project-header-collapsed'
 const PROJECT_PAGE_CONTEXT_MENU_IGNORE_SELECTOR = ['button', 'a', 'input', 'textarea', 'select', '[contenteditable="true"]', '.monaco-editor', '.xterm', '[role="dialog"]'].join(', ')
 
 // Stable fallback so the processUrls selector keeps its reference between store updates.
@@ -33,14 +32,6 @@ const EMPTY_URLS: string[] = []
 
 function shouldSkipProjectPageContextMenu(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(PROJECT_PAGE_CONTEXT_MENU_IGNORE_SELECTOR))
-}
-
-function readProjectHeaderCollapsed(): boolean {
-  try {
-    return localStorage.getItem(PROJECT_HEADER_COLLAPSED_STORAGE_KEY) === '1'
-  } catch {
-    return false
-  }
 }
 
 function DetailPaneFallback() {
@@ -119,7 +110,7 @@ export function DetailPage() {
   const [isStoppingRuntime, setIsStoppingRuntime] = useState(false)
   const [runtimeStartError, setRuntimeStartError] = useState<string | null>(null)
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
-  const [projectHeaderCollapsed, setProjectHeaderCollapsed] = useState<boolean>(() => readProjectHeaderCollapsed())
+  const [projectHeaderCollapsed, setProjectHeaderCollapsed] = useProjectHeaderCollapsed()
 
   // HTML/PDF preview guests forward their mouse sequence as synthetic events
   // dispatched straight on `document` (target === document), which never reach
@@ -141,7 +132,6 @@ export function DetailPage() {
   const projectPath = project?.path
   const environment = projectPath ? detectProjectEnvironment(projectPath) : 'unknown'
   const environmentLabel = project ? projectEnvironmentLabel(environment, locale) : t('common.unknown')
-  const contentTopPaddingClass = projectHeaderCollapsed ? 'pt-5' : 'pt-[calc(var(--window-titlebar-height)+84px+8px)]'
   const isRunning = processStatus === 'running'
   const isStopping = processStatus === 'stopping'
   const hasActiveRunTasks = Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.state === 'starting' || item.state === 'waiting' || item.state === 'ready' || item.state === 'running' || item.state === 'stopping'))
@@ -340,6 +330,10 @@ export function DetailPage() {
       navigate(`/project/${projectId}/transcript`, { replace: true })
       return
     }
+    if (pane === 'sessions') {
+      navigate(`/project/${projectId}/sessions`, { replace: true })
+      return
+    }
     if (pane === 'git') {
       navigate(`/project/${projectId}/aicommit`, { replace: true })
       return
@@ -379,24 +373,6 @@ export function DetailPage() {
       void loadRunTaskConfig(projectId, projectPath)
     }
   }, [projectId, runTaskConfig, projectPath, loadRunTaskConfig])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(PROJECT_HEADER_COLLAPSED_STORAGE_KEY, projectHeaderCollapsed ? '1' : '0')
-    } catch {
-      // ignore storage errors
-    }
-  }, [projectHeaderCollapsed])
-
-  useEffect(() => {
-    const onToggleProjectHeader = () => {
-      setProjectHeaderCollapsed((prev) => !prev)
-    }
-    window.addEventListener('app:toggle-project-header', onToggleProjectHeader as EventListener)
-    return () => {
-      window.removeEventListener('app:toggle-project-header', onToggleProjectHeader as EventListener)
-    }
-  }, [])
 
   const resolvedProjectPath = project?.path ?? ''
   const projectRenderKey = `${projectId ?? 'unknown'}:${resolvedProjectPath}`
@@ -449,158 +425,127 @@ export function DetailPage() {
   }
 
   return (
-    <div
-      className="relative flex h-full flex-col"
+    <ProjectPageShell
+      title={projectDisplayName(project)}
+      path={resolvedProjectPath}
+      titleMeta={
+        <>
+          <p className="mt-0.5 text-[11px] text-[color:var(--color-muted-foreground)]/85">
+            {t('detail.environment')}: {environmentLabel}
+          </p>
+          {runtimeStartError && (
+            <p className="mt-1 max-w-[460px] truncate rounded-full border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-2 py-1 text-[11px] text-[color:var(--color-destructive)]" title={runtimeStartError}>
+              {runtimeStartError}
+            </p>
+          )}
+        </>
+      }
+      titleBadge={
+        isActive ? (
+          <div
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+              isStopping ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]' : isDevReady ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]' : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
+            }`}
+            title={hasRunTaskWarning ? t('runTasks.outputErrorHint') : undefined}
+          >
+            {isStopping ? <RefreshCw className="h-3 w-3 animate-spin" /> : <span className={`h-1.5 w-1.5 rounded-full ${isDevReady ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-warning)]'}`} />}
+            {hasRunTaskWarning && !isStopping && <TriangleAlert className="h-3 w-3 shrink-0" />}
+            {isStopping ? t('common.stopping') : isDevReady ? t('common.running') : t('common.starting')}
+          </div>
+        ) : (
+          <span className="shrink-0 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">{t('common.stop')}</span>
+        )
+      }
+      onBack={() => navigate('/')}
+      activePane={activePane}
+      onPreloadPane={preloadProjectPane}
+      onSelectPane={(nextPane) => {
+        if (!projectId || nextPane === activePane) return
+        navigate(`/project/${projectId}/${nextPane}`)
+      }}
+      headerRight={
+        <>
+          <button
+            type="button"
+            className="quiet-control relative inline-flex items-center gap-1.5 rounded-full border-0 px-2.5 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+            onClick={() => setRunTasksOpen(true)}
+            title={t('runTasks.title')}
+            aria-label={t('runTasks.title')}
+          >
+            <ListTree className="h-3.5 w-3.5" />
+            {hasActiveRunTasks && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[color:var(--color-success)]" />}
+          </button>
+
+          {(isDevReady || pendingOpenDevUrl || !isActive) && (
+            <UrlPopover urls={allProcessUrls}>
+              <button
+                className={`quiet-control inline-flex items-center gap-1.5 rounded-full border-0 py-1.5 text-xs transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60 ${
+                  isDevReady ? 'text-primary hover:text-primary' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                } ${firstDevUrl || pendingOpenDevUrl ? 'px-3' : 'px-2.5'}`}
+                onClick={() => {
+                  void startAndOpenDevUrl()
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  if (projectId) openProjectTerminal(projectId)
+                }}
+                disabled={pendingOpenDevUrl}
+                title={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
+                aria-label={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
+              >
+                {pendingOpenDevUrl ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ArrowUpRight className="h-3 w-3" />}
+                {(firstDevUrl || pendingOpenDevUrl) && <span className="max-w-[180px] truncate">{firstDevUrl ?? t('project.waitingForDevUrl')}</span>}
+              </button>
+            </UrlPopover>
+          )}
+
+          <ProjectLinksTrigger items={docMenuItems} tagOptions={docLinkTagOptionsFromHook} onOpenDefault={defaultDocLink ? () => handleOpenDocLink(defaultDocLink) : undefined} onOpenManager={openProjectLinksManager} size="icon" title={defaultDocLink ? t('common.leftClickOpenFirstLink') : t('detail.docsSettings')} />
+
+          <button
+            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${
+              isActive
+                ? isStopping
+                  ? 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
+                  : isDevReady
+                    ? 'border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+                    : 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
+                : 'bg-primary text-white shadow-sm hover:bg-primary-hover'
+            }`}
+            style={isActive ? (isStopping ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' } : isDevReady ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 32%, transparent)' } : { borderColor: 'color-mix(in srgb, var(--color-warning) 32%, transparent)' }) : undefined}
+            onClick={() => (isActive ? (isStopping ? undefined : handleStopProjectTasks()) : handleStartProjectTasks())}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setMenuPos(null)
+              setRunTasksOpen(true)
+            }}
+            disabled={isStopping}
+            title={t('common.leftClickRunRightClickConfig')}
+          >
+            {isActive ? (
+              <>
+                {isStopping ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : isDevReady ? <Square className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                {isStopping ? t('common.stopping') : isDevReady ? t('common.stop') : t('common.starting')}
+              </>
+            ) : (
+              <>
+                <Play className="h-3.5 w-3.5" />
+                {t('common.run')}
+              </>
+            )}
+          </button>
+        </>
+      }
+      projectHeaderCollapsed={projectHeaderCollapsed}
+      onProjectHeaderCollapsedChange={setProjectHeaderCollapsed}
+      contentClassName="relative h-full min-h-0 w-full"
       onContextMenu={(event) => {
         if (shouldSkipProjectPageContextMenu(event.target)) return
         event.preventDefault()
         setMenuPos({ x: event.clientX, y: event.clientY })
       }}
     >
-      {!projectHeaderCollapsed && (
-        <header className="app-chrome pointer-events-auto absolute inset-x-0 top-0 z-[85] flex min-h-[84px] items-center justify-between px-8 py-4">
-          <div className="flex min-w-0 items-center gap-4">
-            <button className="rounded-full p-2 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]" onClick={() => navigate('/')}>
-              <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
-            </button>
-
-            <div className="min-w-0">
-              <h1 className="truncate text-xl font-semibold tracking-[-0.03em] text-[color:var(--color-foreground)]">{projectDisplayName(project)}</h1>
-              <p className="mt-0.5 truncate text-xs text-[color:var(--color-muted-foreground)]" title={resolvedProjectPath}>
-                {middleTruncatePath(resolvedProjectPath)}
-              </p>
-              <p className="mt-0.5 text-[11px] text-[color:var(--color-muted-foreground)]/85">
-                {t('detail.environment')}: {environmentLabel}
-              </p>
-              {runtimeStartError && (
-                <p className="mt-1 max-w-[460px] truncate rounded-full border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-2 py-1 text-[11px] text-[color:var(--color-destructive)]" title={runtimeStartError}>
-                  {runtimeStartError}
-                </p>
-              )}
-            </div>
-
-            {isActive ? (
-              <div
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
-                  isStopping ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]' : isDevReady ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]' : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
-                }`}
-                title={hasRunTaskWarning ? t('runTasks.outputErrorHint') : undefined}
-              >
-                {isStopping ? <RefreshCw className="h-3 w-3 animate-spin" /> : <span className={`h-1.5 w-1.5 rounded-full ${isDevReady ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-warning)]'}`} />}
-                {hasRunTaskWarning && !isStopping && <TriangleAlert className="h-3 w-3 shrink-0" />}
-                {isStopping ? t('common.stopping') : isDevReady ? t('common.running') : t('common.starting')}
-              </div>
-            ) : (
-              <span className="shrink-0 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">{t('common.stop')}</span>
-            )}
-          </div>
-
-          <div className="flex shrink-0 items-center gap-3">
-            <ProjectPaneTabs
-              activePane={activePane}
-              onPreloadPane={preloadProjectPane}
-              onSelectPane={(nextPane) => {
-                if (!projectId || nextPane === activePane) return
-                navigate(`/project/${projectId}/${nextPane}`)
-              }}
-            />
-
-            <button
-              type="button"
-              className="quiet-control relative inline-flex items-center gap-1.5 rounded-full border-0 px-2.5 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-              onClick={() => setRunTasksOpen(true)}
-              title={t('runTasks.title')}
-              aria-label={t('runTasks.title')}
-            >
-              <ListTree className="h-3.5 w-3.5" />
-              {hasActiveRunTasks && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[color:var(--color-success)]" />}
-            </button>
-
-            {(isDevReady || pendingOpenDevUrl || !isActive) && (
-              <UrlPopover urls={allProcessUrls}>
-                <button
-                  className={`quiet-control inline-flex items-center gap-1.5 rounded-full border-0 py-1.5 text-xs transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60 ${
-                    isDevReady ? 'text-primary hover:text-primary' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                  } ${firstDevUrl || pendingOpenDevUrl ? 'px-3' : 'px-2.5'}`}
-                  onClick={() => {
-                    void startAndOpenDevUrl()
-                  }}
-                  onContextMenu={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    if (projectId) openProjectTerminal(projectId)
-                  }}
-                  disabled={pendingOpenDevUrl}
-                  title={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
-                  aria-label={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
-                >
-                  {pendingOpenDevUrl ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ArrowUpRight className="h-3 w-3" />}
-                  {(firstDevUrl || pendingOpenDevUrl) && <span className="max-w-[180px] truncate">{firstDevUrl ?? t('project.waitingForDevUrl')}</span>}
-                </button>
-              </UrlPopover>
-            )}
-
-            <ProjectLinksTrigger items={docMenuItems} tagOptions={docLinkTagOptionsFromHook} onOpenDefault={defaultDocLink ? () => handleOpenDocLink(defaultDocLink) : undefined} onOpenManager={openProjectLinksManager} size="icon" title={defaultDocLink ? t('common.leftClickOpenFirstLink') : t('detail.docsSettings')} />
-
-            <button
-              className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${
-                isActive
-                  ? isStopping
-                    ? 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
-                    : isDevReady
-                      ? 'border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
-                      : 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
-                  : 'bg-primary text-white shadow-sm hover:bg-primary-hover'
-              }`}
-              style={isActive ? (isStopping ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' } : isDevReady ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 32%, transparent)' } : { borderColor: 'color-mix(in srgb, var(--color-warning) 32%, transparent)' }) : undefined}
-              onClick={() => (isActive ? (isStopping ? undefined : handleStopProjectTasks()) : handleStartProjectTasks())}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setMenuPos(null)
-                setRunTasksOpen(true)
-              }}
-              disabled={isStopping}
-              title={t('common.leftClickRunRightClickConfig')}
-            >
-              {isActive ? (
-                <>
-                  {isStopping ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : isDevReady ? <Square className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
-                  {isStopping ? t('common.stopping') : isDevReady ? t('common.stop') : t('common.starting')}
-                </>
-              ) : (
-                <>
-                  <Play className="h-3.5 w-3.5" />
-                  {t('common.run')}
-                </>
-              )}
-            </button>
-          </div>
-
-          <button
-            type="button"
-            aria-label={t('transcript.collapseProjectHeader')}
-            title={t('transcript.collapseProjectHeader')}
-            className="absolute bottom-0 left-1/2 z-[87] inline-flex h-6 w-6 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-card)] text-[color:var(--color-muted-foreground)] shadow-[0_6px_18px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:scale-105 hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-            onClick={() => setProjectHeaderCollapsed(true)}
-          >
-            <ChevronUp className="h-3.5 w-3.5" strokeWidth={1.8} />
-          </button>
-        </header>
-      )}
-
-      {projectHeaderCollapsed && (
-        <button
-          type="button"
-          aria-label={t('transcript.expandProjectHeader')}
-          className="app-chrome fixed left-1/2 top-[calc(var(--window-titlebar-height)+6px)] z-[86] inline-flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] shadow-[0_6px_18px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:scale-105 hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-          onClick={() => setProjectHeaderCollapsed(false)}
-          title={t('transcript.expandProjectHeader')}
-        >
-          <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.8} />
-        </button>
-      )}
-
       {menuPos && (
         <CardContextMenu
           x={menuPos.x}
@@ -652,87 +597,91 @@ export function DetailPage() {
       {/* 条件挂载：关闭时零开销（不订阅 store、不执行任何弹窗渲染）。 */}
       {runTasksOpen && <RunTasksDialog project={project} open onClose={closeRunTasksDialog} />}
 
-      <div className={`min-h-0 flex-1 px-6 pb-6 sm:px-8 ${contentTopPaddingClass}`}>
-        <div className="relative h-full min-h-0 w-full">
-          <div ref={codePaneRef} className={`absolute inset-0 overflow-hidden ${activePane === 'code' ? '' : 'pointer-events-none invisible opacity-0'}`} aria-hidden={activePane !== 'code'}>
-            <div className="mx-auto h-full min-h-0 w-full min-w-0 max-w-[1360px]">
-              <Suspense fallback={<DetailPaneFallback />}>
-                {hasMountedCodePane && (
-                  <CodeWorkspacePanel
-                    key={projectRenderKey}
-                    projectId={project.id}
-                    projectPath={resolvedProjectPath}
-                    themeMode={themeMode}
-                    projectHeaderCollapsed={projectHeaderCollapsed}
-                    projectName={projectDisplayName(project)}
-                    projectLinkItems={collapsedProjectLinkItems}
-                    hasProjectDocLinks={hasProjectDocLinks}
-                    projectLinkTagOptions={docLinkTagOptionsFromHook}
-                    projectDevUrlActionVisible={isDevReady || pendingOpenDevUrl || !isActive}
-                    projectDevUrlPending={pendingOpenDevUrl}
-                    projectDevUrlReady={isDevReady}
-                    activePane={activePane}
-                    onPreloadPane={preloadProjectPane}
-                    onStartAndOpenDevUrl={startAndOpenDevUrl}
-                    onOpenStartupLogs={() => {
-                      if (projectId) openProjectTerminal(projectId)
-                    }}
-                    onSwitchPane={(nextPane) => {
-                      if (!projectId || nextPane === activePane) return
-                      navigate(`/project/${projectId}/${nextPane}`)
-                    }}
-                    onOpenTranscript={() => {
-                      if (!projectId) return
-                      navigate(`/project/${projectId}/transcript`)
-                    }}
-                    onOpenProjectLinksManager={openProjectLinksManager}
-                    onOpenRunTasks={() => setRunTasksOpen(true)}
-                    runTasksActive={hasActiveRunTasks}
-                    onRequestProjectContextMenu={(x, y) => setMenuPos({ x, y })}
-                  />
-                )}
-              </Suspense>
-            </div>
-          </div>
+      <div ref={codePaneRef} className={`absolute inset-0 overflow-hidden ${activePane === 'code' ? '' : 'pointer-events-none invisible opacity-0'}`} aria-hidden={activePane !== 'code'}>
+        <div className="mx-auto h-full min-h-0 w-full min-w-0 max-w-[1360px]">
+          <Suspense fallback={<DetailPaneFallback />}>
+            {hasMountedCodePane && (
+              <CodeWorkspacePanel
+                key={projectRenderKey}
+                projectId={project.id}
+                projectPath={resolvedProjectPath}
+                themeMode={themeMode}
+                projectHeaderCollapsed={projectHeaderCollapsed}
+                projectName={projectDisplayName(project)}
+                projectLinkItems={collapsedProjectLinkItems}
+                hasProjectDocLinks={hasProjectDocLinks}
+                projectLinkTagOptions={docLinkTagOptionsFromHook}
+                projectDevUrlActionVisible={isDevReady || pendingOpenDevUrl || !isActive}
+                projectDevUrlPending={pendingOpenDevUrl}
+                projectDevUrlReady={isDevReady}
+                activePane={activePane}
+                onPreloadPane={preloadProjectPane}
+                onStartAndOpenDevUrl={startAndOpenDevUrl}
+                onOpenStartupLogs={() => {
+                  if (projectId) openProjectTerminal(projectId)
+                }}
+                onSwitchPane={(nextPane) => {
+                  if (!projectId || nextPane === activePane) return
+                  navigate(`/project/${projectId}/${nextPane}`)
+                }}
+                onOpenTranscript={() => {
+                  if (!projectId) return
+                  navigate(`/project/${projectId}/transcript`)
+                }}
+                onOpenSessions={() => {
+                  if (!projectId) return
+                  navigate(`/project/${projectId}/sessions`)
+                }}
+                onOpenProjectLinksManager={openProjectLinksManager}
+                onOpenRunTasks={() => setRunTasksOpen(true)}
+                runTasksActive={hasActiveRunTasks}
+                onRequestProjectContextMenu={(x, y) => setMenuPos({ x, y })}
+              />
+            )}
+          </Suspense>
+        </div>
+      </div>
 
-          <div ref={aiCommitPaneRef} className={`absolute inset-0 ${activePane === 'aicommit' ? 'overflow-x-auto overflow-y-hidden' : 'overflow-hidden pointer-events-none invisible opacity-0'}`} aria-hidden={activePane !== 'aicommit'}>
-            <div className="mx-auto h-full min-h-0 w-full min-w-[1060px] max-w-[1640px] overflow-hidden">
-              <Suspense fallback={<DetailPaneFallback />}>
-                {hasMountedAiCommitPane && (
-                  <DetailAiCommitPaneHost
-                    key={projectRenderKey}
-                    projectId={project.id}
-                    projectPath={resolvedProjectPath}
-                    projectHeaderCollapsed={projectHeaderCollapsed}
-                    projectName={projectDisplayName(project)}
-                    projectLinkItems={collapsedProjectLinkItems}
-                    hasProjectDocLinks={hasProjectDocLinks}
-                    projectLinkTagOptions={docLinkTagOptionsFromHook}
-                    projectDevUrlActionVisible={isDevReady || pendingOpenDevUrl || !isActive}
-                    projectDevUrlPending={pendingOpenDevUrl}
-                    projectDevUrlReady={isDevReady}
-                    aiCommitConfig={aiCommitConfig}
-                    activePane={activePane}
-                    onPreloadPane={preloadProjectPane}
-                    onSwitchPane={(nextPane) => {
-                      if (!projectId || nextPane === activePane) return
-                      navigate(`/project/${projectId}/${nextPane}`)
-                    }}
-                    onStartAndOpenDevUrl={startAndOpenDevUrl}
-                    onOpenStartupLogs={() => {
-                      if (projectId) openProjectTerminal(projectId)
-                    }}
-                    onOpenTranscript={() => {
-                      if (!projectId) return
-                      navigate(`/project/${projectId}/transcript`)
-                    }}
-                    onOpenProjectLinksManager={openProjectLinksManager}
-                    onCloseProjectContextMenu={() => setMenuPos(null)}
-                  />
-                )}
-              </Suspense>
-            </div>
-          </div>
+      <div ref={aiCommitPaneRef} className={`absolute inset-0 ${activePane === 'aicommit' ? 'overflow-x-auto overflow-y-hidden' : 'overflow-hidden pointer-events-none invisible opacity-0'}`} aria-hidden={activePane !== 'aicommit'}>
+        <div className="mx-auto h-full min-h-0 w-full min-w-[1060px] max-w-[1640px] overflow-hidden">
+          <Suspense fallback={<DetailPaneFallback />}>
+            {hasMountedAiCommitPane && (
+              <DetailAiCommitPaneHost
+                key={projectRenderKey}
+                projectId={project.id}
+                projectPath={resolvedProjectPath}
+                projectHeaderCollapsed={projectHeaderCollapsed}
+                projectName={projectDisplayName(project)}
+                projectLinkItems={collapsedProjectLinkItems}
+                hasProjectDocLinks={hasProjectDocLinks}
+                projectLinkTagOptions={docLinkTagOptionsFromHook}
+                projectDevUrlActionVisible={isDevReady || pendingOpenDevUrl || !isActive}
+                projectDevUrlPending={pendingOpenDevUrl}
+                projectDevUrlReady={isDevReady}
+                aiCommitConfig={aiCommitConfig}
+                activePane={activePane}
+                onPreloadPane={preloadProjectPane}
+                onSwitchPane={(nextPane) => {
+                  if (!projectId || nextPane === activePane) return
+                  navigate(`/project/${projectId}/${nextPane}`)
+                }}
+                onStartAndOpenDevUrl={startAndOpenDevUrl}
+                onOpenStartupLogs={() => {
+                  if (projectId) openProjectTerminal(projectId)
+                }}
+                onOpenTranscript={() => {
+                  if (!projectId) return
+                  navigate(`/project/${projectId}/transcript`)
+                }}
+                onOpenSessions={() => {
+                  if (!projectId) return
+                  navigate(`/project/${projectId}/sessions`)
+                }}
+                onOpenProjectLinksManager={openProjectLinksManager}
+                onCloseProjectContextMenu={() => setMenuPos(null)}
+              />
+            )}
+          </Suspense>
         </div>
       </div>
 
@@ -782,6 +731,6 @@ export function DetailPage() {
         setSettingsOpen={setLinkSettingsOpen}
         hideCard
       />
-    </div>
+    </ProjectPageShell>
   )
 }

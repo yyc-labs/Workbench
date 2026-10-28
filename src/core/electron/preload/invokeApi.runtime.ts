@@ -1,6 +1,6 @@
 import { ipcRenderer } from 'electron'
-import { IPC } from '../main/ipc'
 import type { AiRuntimeProfile, ManagedProcessSnapshot, TerminalInventorySnapshot } from '../../shared/types'
+import { IPC } from '../main/ipc'
 
 export function createRuntimeInvokeApi() {
   return {
@@ -18,7 +18,7 @@ export function createRuntimeInvokeApi() {
 
     stopAllTerminalProcesses: () => ipcRenderer.invoke(IPC.TERMINAL_STOP_ALL),
 
-    startRuntime: (projectId: string, projectPath: string, profile?: AiRuntimeProfile | null, cli?: 'claude' | 'codex') => ipcRenderer.invoke(IPC.RUNTIME_START, projectId, projectPath, profile, cli),
+    startRuntime: (projectId: string, projectPath: string, profile?: AiRuntimeProfile | null, cli?: 'claude' | 'codex' | 'codebuddy', resumeSessionId?: string) => ipcRenderer.invoke(IPC.RUNTIME_START, projectId, projectPath, profile, cli, resumeSessionId),
 
     getRuntimeDiagnostics: (profile?: AiRuntimeProfile | null) => ipcRenderer.invoke(IPC.RUNTIME_DIAGNOSTICS, profile),
 

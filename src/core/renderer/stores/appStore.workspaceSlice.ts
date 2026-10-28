@@ -229,7 +229,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     // remembered 展开集合：上限与校验规则来自纯函数单一事实源（code.expandedDirectories.ts）。
     // 合并语义（与 D30 三态一致）：字段缺省 → 保留现有 remembered（tabs/cursor 等提交不得冲掉展开记忆）；
     // 显式空数组 → 清除；非法条目 → 逐条剔除。
-    const hasExpandedDirectoriesField = Boolean(session) && Object.prototype.hasOwnProperty.call(session, 'expandedDirectories')
+    const hasExpandedDirectoriesField = session !== undefined && Object.hasOwn(session, 'expandedDirectories')
     const existingExpandedDirectories = get().projects.find((project) => project.id === projectId)?.codeSession?.expandedDirectories
     const normalizedExpandedDirectories = normalizeRememberedDirectories(hasExpandedDirectoriesField ? session?.expandedDirectories : existingExpandedDirectories)
     const normalizedSession =

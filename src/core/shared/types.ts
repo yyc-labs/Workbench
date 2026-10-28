@@ -73,7 +73,7 @@ export type AppCacheLocationMode = 'default' | 'install' | 'custom'
 export type ProcessStatus = 'running' | 'stopping' | 'stopped' | 'error'
 export type RunStartupMode = 'silent' | 'terminal'
 
-export type CliTool = 'claude' | 'codex'
+export type CliTool = 'claude' | 'codex' | 'codebuddy'
 export type AiRuntimeProfileKind = 'native' | 'custom'
 export type AiExecutionMode = 'windows-wsl' | 'windows-native' | 'linux-native' | 'macos-native' | 'custom-script' | 'disabled'
 export type AiRuntimeProfileMode = AiExecutionMode | 'inherit'
@@ -2040,3 +2040,24 @@ export type QuickActionResult = { ok: true; kind: 'navigated' } | { ok: true; ki
 export interface QuickActionsConfig {
   actions: QuickAction[]
 }
+export type {
+  AgentHistoryAgent,
+  AgentHistoryCapabilities,
+  AgentHistoryExecutionEnvironment,
+  AgentHistoryIssue,
+  AgentHistoryIssueCode,
+  AgentHistoryListArgs,
+  AgentHistoryListResult,
+  AgentHistoryPreviewMessage,
+  AgentHistoryProjectContext,
+  AgentHistoryResolveSessionPathArgs,
+  AgentHistoryResolveSessionPathResult,
+  AgentHistorySession,
+  AgentHistorySessionSource,
+  AgentHistorySessionView,
+} from './types/agentHistory'
+export {
+  AGENT_HISTORY_AGENTS,
+  AGENT_HISTORY_LIMITS,
+  toSessionView,
+} from './types/agentHistory'

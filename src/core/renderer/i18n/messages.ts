@@ -1,4 +1,5 @@
 import type { AppLocale } from '../../shared/types'
+import { agentHistoryMessages } from './messages/agentHistory'
 import { aiAndRuntimeMessages } from './messages/aiAndRuntime'
 import { codeMessages } from './messages/code'
 import { commonMessages } from './messages/common'
@@ -55,6 +56,7 @@ function mergeLocaleMessages(locale: ResolvedLocale) {
     },
     { quickActions: quickActionsMessages[locale].quickActions },
     { terminalCollection: terminalCollectionMessages[locale].terminalCollection },
+    { agentHistory: agentHistoryMessages[locale].agentHistory },
   )
 }
 

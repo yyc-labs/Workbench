@@ -48,6 +48,7 @@ import type {
   CodexSettingsSaveResult,
   CodexSettingsSnapshot,
   DocLinkLibraryFile,
+  DocxPreviewResult,
   GitConflictFileRequest,
   GitConflictFileResult,
   GitFileDiffRequest,
@@ -56,13 +57,13 @@ import type {
   GitOperationResult,
   GitRepositoryListResult,
   GitRepositorySnapshot,
-  GitStatusOptimizationRequest,
-  GitStatusOptimizationResult,
-  GitStatusOptimizationState,
   GitResolveConflictRequest,
   GitResolveConflictResult,
   GitSetFileStageRequest,
   GitSetFileStageResult,
+  GitStatusOptimizationRequest,
+  GitStatusOptimizationResult,
+  GitStatusOptimizationState,
   LearningCategory,
   LearningCreateCategoryPayload,
   LearningCreateNotePayload,
@@ -81,7 +82,6 @@ import type {
   MarkdownDocumentWriteResult,
   ProcessInfo,
   ProcessPortInventory,
-  DocxPreviewResult,
   ProjectDocxSourceResult,
   ProjectFileArchiveEntry,
   ProjectFileAutoLoadDecision,
@@ -131,6 +131,8 @@ import type {
   TranscriptUpdatePayload,
   UpsertSharedDocLinkInput,
 } from './types'
+import type { AgentHistoryListArgs, AgentHistoryListResult, AgentHistoryMessagesArgs, AgentHistoryMessagesResult, AgentHistoryResolveSessionPathArgs, AgentHistoryResolveSessionPathResult, AgentHistoryResumeResult, AgentHistorySearchArgs, AgentHistorySearchResult } from './types/agentHistory'
+import type { AgentHistoryHandoffCreateArgs, AgentHistoryHandoffRecord } from './types/agentHistoryHandoff'
 
 export type ElectronApiSubscription<T> = (cb: (data: T) => void) => () => void
 export type ElectronApiSignalSubscription = (cb: () => void) => () => void
@@ -402,7 +404,7 @@ export interface RuntimeElectronApi {
   /** 轻量清单快照（只读主进程 Map + revision），用于初始/重连基线。 */
   getTerminalInventorySnapshot: () => Promise<TerminalInventorySnapshot>
   stopAllTerminalProcesses: () => Promise<TerminalStopAllResult>
-  startRuntime: (projectId: string, projectPath: string, profile?: AiRuntimeProfile | null, cli?: 'claude' | 'codex') => Promise<boolean>
+  startRuntime: (projectId: string, projectPath: string, profile?: AiRuntimeProfile | null, cli?: 'claude' | 'codex' | 'codebuddy', resumeSessionId?: string) => Promise<boolean>
   getRuntimeDiagnostics: (profile?: AiRuntimeProfile | null) => Promise<RuntimeDiagnostics>
   listRuntimeSessions: () => Promise<RuntimeSessionInfo[]>
   listRuntimeEntries: () => Promise<RuntimeEntry[]>
@@ -453,9 +455,27 @@ export interface CalendarElectronApi {
   checkCalendarUpdate: (options?: { year?: number; force?: boolean }) => Promise<CalendarCheckResult[]>
 }
 
+/**
+ * Agent history (local AI CLI sessions) — read-only view. Only projectId /
+ * sessionKey cross the bridge; disk paths are resolved in the main process.
+ */
+export interface AgentHistoryElectronApi {
+  listAgentHistorySessions: (args: AgentHistoryListArgs) => Promise<AgentHistoryListResult>
+  readAgentHistoryMessages: (args: AgentHistoryMessagesArgs) => Promise<AgentHistoryMessagesResult>
+  resolveAgentHistorySessionPath: (args: AgentHistoryResolveSessionPathArgs) => Promise<AgentHistoryResolveSessionPathResult>
+  watchAgentHistory: (args: AgentHistoryResolveSessionPathArgs) => Promise<{ ok: true }>
+  searchAgentHistory: (args: AgentHistorySearchArgs) => Promise<AgentHistorySearchResult>
+  resumeAgentHistory: (args: AgentHistoryResolveSessionPathArgs) => Promise<AgentHistoryResumeResult>
+  createAgentHistoryHandoff: (args: AgentHistoryHandoffCreateArgs) => Promise<{ ok: true; record: AgentHistoryHandoffRecord } | { ok: false; reason: string }>
+  listAgentHistoryHandoffs: () => Promise<AgentHistoryHandoffRecord[]>
+  confirmAgentHistoryHandoff: (args: { id: string; loaded: boolean }) => Promise<AgentHistoryHandoffRecord | null>
+  unwatchAgentHistory: (args: AgentHistoryResolveSessionPathArgs) => Promise<{ ok: true }>
+}
+
 export interface SubscriptionElectronApi {
   onProcessOutput: ElectronApiSubscription<ProcessOutputEvent>
   onRunTaskProgress: ElectronApiSubscription<RunTaskProgressEvent>
+  onAgentHistoryChanged: ElectronApiSubscription<{ projectId: string; bursts: number }>
   onRunTaskConfigChanged: ElectronApiSubscription<string>
   onProcessStatus: ElectronApiSubscription<ProcessStatusEvent>
   onProcessExit: ElectronApiSubscription<ProcessExitEvent>
@@ -495,4 +515,5 @@ export type ElectronApi = CoreElectronApi &
   RunTaskElectronApi &
   QuickActionsElectronApi &
   CalendarElectronApi &
+  AgentHistoryElectronApi &
   SubscriptionElectronApi

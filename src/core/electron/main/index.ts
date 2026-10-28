@@ -129,6 +129,11 @@ const {
   quickActionScheduler,
   calendarService,
   calendarUpdater,
+  agentHistoryService,
+  agentHistoryWatch,
+  agentHistoryFulltext,
+  agentHistoryResume,
+  agentHistoryHandoff,
 } = services
 
 const runTaskService = new RunTaskService({
@@ -836,6 +841,11 @@ app.whenReady().then(async () => {
               quickActionService,
               calendarService,
               calendarUpdater,
+              agentHistoryService,
+              agentHistoryWatch,
+              agentHistoryFulltext,
+              agentHistoryResume,
+              agentHistoryHandoff,
             })
           },
         },

@@ -1,14 +1,14 @@
 import { ipcMain } from 'electron'
+import type { AiRuntimeProfile, TerminalProcessInventory, TerminalStopAllResult } from '../../../shared/types'
 import { IPC } from '../ipc'
-import { tmuxManager } from '../tmux-manager'
 import { openSshTerminal, openTerminalAtPath } from '../shell/openers'
 import { resolveInteractiveShellCommand } from '../shell/windows-shell'
-import type { AiRuntimeProfile, TerminalProcessInventory, TerminalStopAllResult } from '../../../shared/types'
+import { tmuxManager } from '../tmux-manager'
 import { getBootDistro, type RegisterIpcHandlersDependencies } from './registerIpcHandlers.shared'
 
 export function registerRuntimeIpcHandlers(deps: RegisterIpcHandlersDependencies): void {
-  ipcMain.handle(IPC.RUNTIME_START, async (_event, projectId: string, projectPath: string, profile?: AiRuntimeProfile | null, cli?: 'claude' | 'codex') => {
-    return deps.runtimeService.startRuntime(projectId, projectPath, profile, cli)
+  ipcMain.handle(IPC.RUNTIME_START, async (_event, projectId: string, projectPath: string, profile?: AiRuntimeProfile | null, cli?: 'claude' | 'codex' | 'codebuddy', resumeSessionId?: string) => {
+    return deps.runtimeService.startRuntime(projectId, projectPath, profile, cli, resumeSessionId)
   })
 
   ipcMain.handle(IPC.SHELL_OPEN_TERMINAL, async (_event, sessionName: string, statusHint?: string) => {

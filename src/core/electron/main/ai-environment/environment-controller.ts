@@ -1,40 +1,17 @@
-import type {
-  AiCommitConfig,
-  AiEnvironmentConfig,
-  AiExecutionMode,
-  AiRuntimeProfile,
-  AppConfig,
-  Capability,
-  RuntimeDiagnostics,
-  RuntimeSessionInfo,
-} from '../../../shared/types'
-import { availableModesForCapability, migrateLegacyEnvironment } from './platform-detector'
 import { getAiRuntimeProfileCli } from '../../../shared/aiRuntimeProfiles'
-import {
-  isLikelyWslEntrypointPath,
-  shouldUseWslForRuntimeEntrypoint,
-} from '../../../shared/runtimeEntrypoint'
-import type {
-  AiCommitLaunchPlan,
-  AiExecutionProvider,
-  ProviderContext,
-  RuntimeLaunchPlan,
-} from './provider-types'
-import { windowsWslProvider } from './providers/windows-wsl-provider'
-import { windowsNativeProvider } from './providers/windows-native-provider'
-import { posixNativeProvider } from './providers/posix-native-provider'
-import { customScriptProvider } from './providers/custom-script-provider'
-import { disabledProvider } from './providers/disabled-provider'
+import { isLikelyWslEntrypointPath, shouldUseWslForRuntimeEntrypoint } from '../../../shared/runtimeEntrypoint'
+import type { AiCommitConfig, AiEnvironmentConfig, AiExecutionMode, AiRuntimeProfile, AppConfig, Capability, RuntimeDiagnostics, RuntimeSessionInfo } from '../../../shared/types'
 import { resolveWslVsCodeTarget } from '../shell/openers'
 import { wslBridge } from '../wsl-bridge'
+import { availableModesForCapability, migrateLegacyEnvironment } from './platform-detector'
+import type { AiCommitLaunchPlan, AiExecutionProvider, ProviderContext, RuntimeLaunchPlan } from './provider-types'
+import { customScriptProvider } from './providers/custom-script-provider'
+import { disabledProvider } from './providers/disabled-provider'
+import { posixNativeProvider } from './providers/posix-native-provider'
+import { windowsNativeProvider } from './providers/windows-native-provider'
+import { windowsWslProvider } from './providers/windows-wsl-provider'
 
-const PROVIDERS: AiExecutionProvider[] = [
-  windowsWslProvider,
-  windowsNativeProvider,
-  posixNativeProvider,
-  customScriptProvider,
-  disabledProvider,
-]
+const PROVIDERS: AiExecutionProvider[] = [windowsWslProvider, windowsNativeProvider, posixNativeProvider, customScriptProvider, disabledProvider]
 
 function normalizeAiCommitConfig(input: AppConfig['aiCommit'] | undefined): AiCommitConfig {
   return {
@@ -78,18 +55,11 @@ export class AiEnvironmentController {
       ...diagnostics,
       supported: profileIssue ? false : diagnostics.supported,
       availableModes: this.getAvailableModes(),
-      issues: profileIssue && !diagnostics.issues.includes(profileIssue)
-        ? [...diagnostics.issues, profileIssue]
-        : diagnostics.issues,
+      issues: profileIssue && !diagnostics.issues.includes(profileIssue) ? [...diagnostics.issues, profileIssue] : diagnostics.issues,
     }
   }
 
-  async resolveRuntimeLaunch(input: {
-    projectId: string
-    projectPath: string
-    cli: 'claude' | 'codex'
-    profile?: AiRuntimeProfile
-  }): Promise<RuntimeLaunchPlan> {
+  async resolveRuntimeLaunch(input: { projectId: string; projectPath: string; cli: 'claude' | 'codex' | 'codebuddy'; profile?: AiRuntimeProfile }): Promise<RuntimeLaunchPlan> {
     const profileIssue = this.getRuntimeProfileIssue(input.profile)
     if (profileIssue) throw new Error(profileIssue)
     const modeOverride = this.getProfileModeOverride(input.profile)
@@ -101,12 +71,7 @@ export class AiEnvironmentController {
     })
   }
 
-  async resolveAiCommitLaunch(input: {
-    repoRoot: string
-    scriptPath: string
-    scriptWslPath?: string | null
-    aiCommitConfig?: AiCommitConfig
-  }): Promise<AiCommitLaunchPlan> {
+  async resolveAiCommitLaunch(input: { repoRoot: string; scriptPath: string; scriptWslPath?: string | null; aiCommitConfig?: AiCommitConfig }): Promise<AiCommitLaunchPlan> {
     const aiCommitConfig = normalizeAiCommitConfig(input.aiCommitConfig ?? this.getConfig().aiCommit)
     const provider = await this.getAiCommitProvider(input.repoRoot)
     return provider.resolveAiCommitLaunch(this.buildContext(), {
@@ -177,7 +142,7 @@ export class AiEnvironmentController {
     const context = this.buildContext(modeOverride)
     const preferredMode = context.config.mode
     const provider = PROVIDERS.find((item) => item.mode === preferredMode)
-    if (provider && await provider.isSupported(context)) {
+    if (provider && (await provider.isSupported(context))) {
       return provider
     }
 
@@ -219,10 +184,7 @@ export class AiEnvironmentController {
     }
   }
 
-  private shouldUseWslForCustomScript(
-    entrypoint: string,
-    aiEnvironment?: AiEnvironmentConfig,
-  ): boolean {
+  private shouldUseWslForCustomScript(entrypoint: string, aiEnvironment?: AiEnvironmentConfig): boolean {
     if (aiEnvironment?.runtimeEntrypointConfig) {
       return shouldUseWslForRuntimeEntrypoint(aiEnvironment)
     }

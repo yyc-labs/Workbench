@@ -82,6 +82,7 @@ type CodeWorkspacePanelProps = {
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
   onOpenStartupLogs?: () => void
   onOpenTranscript?: () => void
+  onOpenSessions?: () => void
   onOpenProjectLinksManager?: () => void
   onOpenRunTasks?: () => void
   runTasksActive?: boolean
@@ -110,6 +111,7 @@ export function CodeWorkspacePanel({
   onStartAndOpenDevUrl,
   onOpenStartupLogs,
   onOpenTranscript,
+  onOpenSessions,
   onOpenProjectLinksManager,
   onOpenRunTasks,
   runTasksActive,
@@ -160,6 +162,37 @@ export function CodeWorkspacePanel({
   const loadProjectTranscripts = useAppStore((s) => s.loadProjectTranscripts)
   const openTranscript = useAppStore((s) => s.openTranscript)
   const openTranscriptReference = useAppStore((s) => s.openTranscriptReference)
+  const loadTranscriptSession = useAppStore((s) => s.loadTranscriptSession)
+  // 转录预热：code 工作区是默认页，空闲时把当前项目的转录列表与最新一条内容
+  // 预取进 store（去重 + LRU 缓存），首次切「转录」tab 数据即取即用。
+  useEffect(() => {
+    if (!projectId) return
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
+    }
+    let cancelled = false
+    const run = () => {
+      if (cancelled) return
+      void loadProjectTranscripts(projectId).then(() => {
+        if (cancelled) return
+        const summaries = useAppStore.getState().transcriptSummariesByProjectId[projectId]
+        const first = summaries?.[0]
+        if (first) void loadTranscriptSession(projectId, first.id)
+      })
+    }
+    if (idleWindow.requestIdleCallback) {
+      idleWindow.requestIdleCallback(run, { timeout: 3000 })
+    } else {
+      const timer = window.setTimeout(run, 1500)
+      return () => {
+        cancelled = true
+        window.clearTimeout(timer)
+      }
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, loadProjectTranscripts, loadTranscriptSession])
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
   const [isExplorerOpen, setIsExplorerOpen] = useState(() => !window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(() => {
@@ -1073,6 +1106,7 @@ export function CodeWorkspacePanel({
         onStartAndOpenDevUrl={onStartAndOpenDevUrl}
         onOpenStartupLogs={onOpenStartupLogs}
         onOpenTranscript={onOpenTranscript}
+        onOpenSessions={onOpenSessions}
         onOpenProjectLinksManager={onOpenProjectLinksManager}
         onOpenRunTasks={onOpenRunTasks}
         runTasksActive={runTasksActive}
