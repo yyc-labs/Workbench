@@ -77,6 +77,13 @@ function TerminalCollectionPanelInner({ contextProjectId }: TerminalCollectionPa
   const [draftTitle, setDraftTitle] = useState('')
   /** 停止确认：project 范围只停该项目，all 范围停全部项目。 */
   const [stopConfirm, setStopConfirm] = useState<{ scope: 'project' | 'all'; projectId?: string; projectName?: string } | null>(null)
+  /** 项目 tab 菜单「关闭全部终端」的两段确认：第一段点击后按钮进入确认态，再点一次执行（2026-11-03 替代弹窗）。 */
+  const [stopArmed, setStopArmed] = useState(false)
+  /** 关闭右键菜单并复位两段确认态。 */
+  const closeMenu = useCallback(() => {
+    setMenuPosition(null)
+    setStopArmed(false)
+  }, [])
   const addButtonRef = useRef<HTMLButtonElement | null>(null)
   /** 重命名提交守卫：Enter 与 blur 可能同帧触发，只允许第一个路径生效。 */
   const renamingKeyGuardRef = useRef<string | null>(null)
@@ -252,6 +259,7 @@ function TerminalCollectionPanelInner({ contextProjectId }: TerminalCollectionPa
           event.preventDefault()
           event.stopPropagation()
           setMenuPosition({ x: event.clientX, y: event.clientY })
+          setStopArmed(false)
         }}
       >
         <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
@@ -264,12 +272,13 @@ function TerminalCollectionPanelInner({ contextProjectId }: TerminalCollectionPa
                 className={`group/tab flex shrink-0 cursor-pointer items-center gap-1.5 border-r border-[color:var(--color-border)] px-3 text-[11px] transition-colors ${active ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)]' : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)]/45'}`}
                 onClick={() => setActiveProject(group.projectId)}
                 onContextMenu={(event) => {
-                  // tab 自身右键：只操作该项目的菜单（阻止冒泡到行级面板菜单）。
+                  // tab 自身右键：卡片锚定在 tab 正上方（跟光标会随点击点漂移）。
                   event.preventDefault()
                   event.stopPropagation()
-                  setMenuPosition({ x: event.clientX, y: event.clientY, projectId: group.projectId })
+                  const rect = event.currentTarget.getBoundingClientRect()
+                  setMenuPosition({ x: rect.left, y: rect.top, projectId: group.projectId })
+                  setStopArmed(false)
                 }}
-                title={group.projectName}
               >
                 <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${group.runningCount > 0 ? 'bg-[color:var(--color-success)]' : 'bg-transparent'}`} />
                 <span className="max-w-[160px] truncate font-medium">{group.projectName}</span>
@@ -411,6 +420,7 @@ function TerminalCollectionPanelInner({ contextProjectId }: TerminalCollectionPa
           x={menuPosition.x}
           y={menuPosition.y}
           layout="grouped"
+          fitHeight={Boolean(menuPosition.projectId)}
           sections={
             menuPosition.projectId
               ? [
@@ -420,12 +430,20 @@ function TerminalCollectionPanelInner({ contextProjectId }: TerminalCollectionPa
                     items: [
                       {
                         id: 'stop-project',
-                        label: t('terminalCollection.stopProjectTerminals'),
+                        // 两段确认：第一次点击进入确认态（菜单保持），再点一次执行（2026-11-03 替代弹窗确认）。
+                        label: stopArmed ? t('terminalCollection.stopProjectConfirmAgain') : t('terminalCollection.stopProjectTerminals'),
                         icon: <CircleStop className="h-3.5 w-3.5" />,
+                        danger: stopArmed,
+                        keepOpenOnSelect: !stopArmed,
                         disabled: (menuGroup?.terminals.length ?? 0) === 0,
                         onSelect: () => {
-                          setStopConfirm({ scope: 'project', projectId: menuPosition.projectId, projectName: menuGroup?.projectName })
-                          setMenuPosition(null)
+                          if (!stopArmed) {
+                            setStopArmed(true)
+                            return
+                          }
+                          const projectId = menuPosition.projectId
+                          if (projectId) stopProjectTerminals(projectId)
+                          closeMenu()
                         },
                       },
                     ],
@@ -461,7 +479,7 @@ function TerminalCollectionPanelInner({ contextProjectId }: TerminalCollectionPa
                   },
                 ]
           }
-          onClose={() => setMenuPosition(null)}
+          onClose={closeMenu}
         />
       ) : null}
 

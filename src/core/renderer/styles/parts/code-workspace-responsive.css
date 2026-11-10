@@ -37,17 +37,6 @@
     width: 100%;
   }
 
-  .code-file-quick-drawer {
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 100%;
-    max-width: 100%;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-  }
-
   .recent-project-drawer {
     top: 40px;
     left: 0;

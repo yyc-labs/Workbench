@@ -197,7 +197,8 @@ export const createTerminalCollectionSlice: StateCreator<AppState, [], [], Termi
       return
     }
     // 唤醒决策（纯函数 resolveTerminalCollectionWake）：
-    // 非项目路由且集合里已有任意会话 → 只唤醒不新建；项目路由该项目没有终端 → 新建。
+    // 非项目路由：有会话只唤醒不新建，无会话（toolbox 不算）只开面板空态不建终端；
+    // 项目路由：该项目没有终端 → 新建。
     const decision = resolveTerminalCollectionWake({
       contextProjectId,
       activeProjectId: get().collectionActiveProjectId,
@@ -205,7 +206,13 @@ export const createTerminalCollectionSlice: StateCreator<AppState, [], [], Termi
       pendingProjectIds: get().collectionPendingTerminals.map((pending) => pending.projectId),
       inventoryProcessIds: get().terminalInventory.map((snapshot) => snapshot.processId),
     })
-    if (decision.action === 'none') return
+    if (decision.action === 'open') {
+      // 非项目路由且无会话：只打开面板（空态），不自动建终端（2026-11-03）。
+      const next = { ...panel, hidden: false }
+      set({ floatingPanel: next, collectionActiveProjectId: null, collectionActiveKey: null })
+      persistFloatingPanel(next)
+      return
+    }
     if (decision.action === 'create') {
       const project = get().projects.find((item) => item.id === decision.projectId)
       if (!project) return

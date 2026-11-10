@@ -23,6 +23,14 @@ const STOP_PORT_POLL_INTERVAL_MS = 200
 /** …but give up after this long and let the process-exit event settle the state. */
 const STOP_PORT_GRACE_MS = 5_000
 const PORT_PROBE_TIMEOUT_MS = 300
+/**
+ * 快捷操作重启语义：先停旧实例再启动。交互 shell 保活后，旧终端（哪怕里面
+ * 的 dev server 已死）仍占着进程 key，startTaskNow 会把它当「已在运行」跳过
+ * spawn——重启前必须等 key 真正从 ProcessManager 释放。6s 上限覆盖 pty
+ * 1.5s / spawn 3.5s 的强杀安全网，超时后交给 startTaskNow 的 isRunning 守卫兜底。
+ */
+const RESTART_STOP_POLL_INTERVAL_MS = 100
+const RESTART_STOP_TIMEOUT_MS = 6_000
 /** Output patterns hinting a starting task is actually failing (hint only — never settles the task). */
 // Output patterns hinting a failing task (hint only — never settles the task).
 const TASK_ERROR_HINT_PATTERNS: RegExp[] = [
@@ -191,6 +199,73 @@ export class RunTaskScheduler {
     await this.startTaskNow(session, task, initialSize)
     const state = session.states.get(task.id)?.state
     return state !== 'failed'
+  }
+
+  /**
+   * 快捷操作启动语义 = 重启：先停掉该任务 key 上的旧实例（交互 shell 保活后，
+   * 死掉 dev server 的空壳终端也占着 key，会让普通 start 把任务误判为已在
+   * 运行而拒绝 spawn），等进程 key 与监听端口都释放后再全新启动。没有旧实例
+   * 时行为与 start() 完全一致。
+   */
+  async restart(projectId: string, projectPath: string, task: RunTask, initialSize?: PtySize): Promise<boolean> {
+    const processManager = this.getProcessManager()
+    if (!processManager) return false
+
+    const key = runTaskProcessKey(projectId, task.id)
+    if (processManager.isRunning(key)) {
+      const session = this.sessions.get(projectId)
+      if (session && session.tasks.has(task.id)) this.stopSessionTask(session, task)
+      else processManager.stop(key)
+      await this.waitTaskStopped(projectId, task, session?.states.get(task.id))
+    }
+    return this.start(projectId, projectPath, task, initialSize)
+  }
+
+  /**
+   * "start all" 的重启版本（快捷操作一键启动）：新计划里的每个任务，只要还
+   * 有旧进程在跑（含保活空壳终端）就先停掉并等释放，然后整体从干净状态启动。
+   */
+  async restartAll(projectId: string, projectPath: string, tasks: RunTask[], initialSize?: PtySize): Promise<{ started: boolean; error?: string }> {
+    if (tasks.length === 0) return { started: false, error: 'No run tasks configured.' }
+    const processManager = this.getProcessManager()
+    if (!processManager) return { started: false, error: 'Process manager unavailable.' }
+
+    let ordered: RunTask[]
+    try {
+      ordered = topoSortRunTasks(tasks)
+    } catch (error) {
+      const message = error instanceof RunTaskCycleError ? error.message : String(error)
+      return { started: false, error: message }
+    }
+
+    const session = this.sessions.get(projectId)
+    for (const task of ordered) {
+      const key = runTaskProcessKey(projectId, task.id)
+      if (!processManager.isRunning(key)) continue
+      if (session && session.tasks.has(task.id)) this.stopSessionTask(session, task)
+      else processManager.stop(key)
+    }
+    await Promise.all(ordered.map((task) => this.waitTaskStopped(projectId, task, session?.states.get(task.id))))
+
+    return this.startAll(projectId, projectPath, ordered, initialSize)
+  }
+
+  /**
+   * 轮询直到该任务的进程 key 从 ProcessManager 释放，且已知监听端口不再被
+   * 占用（旧进程刚死端口可能有短暂残留，立刻重启会 EADDRINUSE）。超时后
+   * 照常返回——startTaskNow 的 isRunning 守卫保证不会双重 spawn。
+   */
+  private async waitTaskStopped(projectId: string, task: RunTask, state?: RunTaskSessionState): Promise<void> {
+    const processManager = this.getProcessManager()
+    if (!processManager) return
+    const key = runTaskProcessKey(projectId, task.id)
+    const deadline = Date.now() + RESTART_STOP_TIMEOUT_MS
+    while (Date.now() < deadline) {
+      const port = resolveTaskListenPort(task, state)
+      const settled = !processManager.isRunning(key) && (port === null || !(await isPortListening(port)))
+      if (settled) return
+      await new Promise((resolve) => setTimeout(resolve, RESTART_STOP_POLL_INTERVAL_MS))
+    }
   }
 
   async stopTask(projectId: string, taskId: string): Promise<boolean> {

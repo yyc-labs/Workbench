@@ -18,8 +18,8 @@ function setup(overrides = {}) {
   const rewrittenShortcuts = []
 
   const runTaskService = {
-    startCalls: [],
-    startAllCalls: [],
+    restartCalls: [],
+    restartAllCalls: [],
     config: {
       config: {
         version: 1,
@@ -32,13 +32,13 @@ function setup(overrides = {}) {
     getConfig(projectPath) {
       return overrides.configError ? { config: null, error: 'invalid-json' } : this.config
     },
-    async start(projectId, projectPath, task) {
-      this.startCalls.push({ projectId, projectPath, task })
+    async restart(projectId, projectPath, task) {
+      this.restartCalls.push({ projectId, projectPath, task })
       return true
     },
-    async startAll(projectId, projectPath, config) {
-      this.startAllCalls.push({ projectId, projectPath, config })
-      return overrides.startAllResult ?? { started: true }
+    async restartAll(projectId, projectPath, config) {
+      this.restartAllCalls.push({ projectId, projectPath, config })
+      return overrides.restartAllResult ?? { started: true }
     },
   }
 
@@ -162,21 +162,21 @@ test('execute open-project rejects unknown projects', async () => {
   assert.deepEqual(await service.execute({ spec: { type: 'open-project', projectPath: 'D:/nope' } }), { ok: false, code: 'invalid-project' })
 })
 
-test('execute run-task with taskId starts only that task', async () => {
+test('execute run-task with taskId restarts only that task', async () => {
   const { service, runTaskService } = setup()
   const result = await service.execute({ spec: { type: 'run-task', projectPath: PROJECT_PATH, taskId: 'web' } })
   assert.deepEqual(result, { ok: true, kind: 'task-started', taskIds: ['web'] })
-  assert.equal(runTaskService.startCalls.length, 1)
-  assert.equal(runTaskService.startCalls[0].projectId, hashIdOf(PROJECT_PATH))
-  assert.equal(runTaskService.startAllCalls.length, 0)
+  assert.equal(runTaskService.restartCalls.length, 1)
+  assert.equal(runTaskService.restartCalls[0].projectId, hashIdOf(PROJECT_PATH))
+  assert.equal(runTaskService.restartAllCalls.length, 0)
 })
 
-test('execute run-task without taskId starts all tasks', async () => {
+test('execute run-task without taskId restarts all tasks', async () => {
   const { service, runTaskService } = setup()
   const result = await service.execute({ spec: { type: 'run-task', projectPath: PROJECT_PATH } })
   assert.deepEqual(result, { ok: true, kind: 'task-started', taskIds: ['web', 'api'] })
-  assert.equal(runTaskService.startAllCalls.length, 1)
-  assert.equal(runTaskService.startCalls.length, 0)
+  assert.equal(runTaskService.restartAllCalls.length, 1)
+  assert.equal(runTaskService.restartCalls.length, 0)
 })
 
 test('execute run-task reports invalid-task for unknown task ids', async () => {
@@ -184,8 +184,8 @@ test('execute run-task reports invalid-task for unknown task ids', async () => {
   assert.deepEqual(await service.execute({ spec: { type: 'run-task', projectPath: PROJECT_PATH, taskId: 'ghost' } }), { ok: false, code: 'invalid-task' })
 })
 
-test('execute run-task surfaces startAll failures and config read errors', async () => {
-  const failed = setup({ startAllResult: { started: false, error: 'No run tasks configured.' } })
+test('execute run-task surfaces restartAll failures and config read errors', async () => {
+  const failed = setup({ restartAllResult: { started: false, error: 'No run tasks configured.' } })
   const failedResult = await failed.service.execute({ spec: { type: 'run-task', projectPath: PROJECT_PATH } })
   assert.equal(failedResult.ok, false)
   assert.equal(failedResult.code, 'exec-failed')

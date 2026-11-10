@@ -4,6 +4,7 @@ import { matchProjectQuery, sortProjectsByRecency } from '../../../shared/termin
 import { useI18n } from '../../i18n'
 import { projectDisplayName } from '../../lib/projectDisplay'
 import { useAppStore } from '../../stores/appStore'
+import { useListItemNav } from '../../hooks/useListItemNav'
 import { dropdownSurfaceClassName, dropdownSurfaceStyle } from '../ui/dropdown'
 
 type TerminalCollectionProjectPickerProps = {
@@ -50,17 +51,17 @@ export function TerminalCollectionProjectPicker({ anchor, triggerRef, onClose }:
   const processes = useAppStore((s) => s.processes)
   const addCollectionTerminal = useAppStore((s) => s.addCollectionTerminal)
   const [query, setQuery] = useState('')
-  const [activeIndex, setActiveIndex] = useState(0)
   const [layout, setLayout] = useState<PickerLayout>(() => resolveLayout(anchor))
   const cardRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const listRef = useRef<HTMLDivElement | null>(null)
+  // 列表吸附：鼠标悬浮只切高亮不滚动；键盘上下键才做视口吸附（公共 hook useListItemNav）。
 
   const filteredProjects = useMemo(() => sortProjectsByRecency(projects).filter((project) => matchProjectQuery(project, query)), [projects, query])
+  const { activeIndex, hoverItem, moveActive, reset, listRef } = useListItemNav()
 
   useEffect(() => {
-    setActiveIndex(0)
-  }, [query])
+    reset()
+  }, [query, reset])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -87,14 +88,6 @@ export function TerminalCollectionProjectPicker({ anchor, triggerRef, onClose }:
     return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [onClose, triggerRef])
 
-  // 键盘导航时把激活项滚入可视区。
-  useEffect(() => {
-    const list = listRef.current
-    if (!list) return
-    const active = list.querySelector<HTMLElement>('[data-active="true"]')
-    active?.scrollIntoView({ block: 'nearest' })
-  }, [activeIndex])
-
   const handleSelect = useCallback(
     (projectId: string, projectPath: string) => {
       void addCollectionTerminal(projectId, projectPath)
@@ -108,20 +101,20 @@ export function TerminalCollectionProjectPicker({ anchor, triggerRef, onClose }:
       if (filteredProjects.length === 0) return
       if (event.key === 'ArrowDown') {
         event.preventDefault()
-        setActiveIndex((current) => (current + 1) % filteredProjects.length)
+        moveActive(1, filteredProjects.length)
       } else if (event.key === 'ArrowUp') {
         event.preventDefault()
-        setActiveIndex((current) => (current - 1 + filteredProjects.length) % filteredProjects.length)
+        moveActive(-1, filteredProjects.length)
       } else if (event.key === 'Enter') {
         event.preventDefault()
-        const target = filteredProjects[activeIndex]
+        const target = filteredProjects[Math.min(activeIndex, filteredProjects.length - 1)]
         if (target) handleSelect(target.id, target.path)
       } else if (event.key === 'Escape') {
         event.preventDefault()
         onClose()
       }
     },
-    [activeIndex, filteredProjects, handleSelect, onClose],
+    [activeIndex, filteredProjects, handleSelect, moveActive, onClose],
   )
 
   const safeActiveIndex = filteredProjects.length > 0 ? Math.min(activeIndex, filteredProjects.length - 1) : -1
@@ -167,7 +160,7 @@ export function TerminalCollectionProjectPicker({ anchor, triggerRef, onClose }:
                 data-active={index === safeActiveIndex}
                 className={`flex w-full min-w-0 items-start gap-2 rounded-[10px] px-2 py-1.5 text-left transition-colors ${index === safeActiveIndex ? 'bg-[color:var(--color-accent)]' : 'hover:bg-[color:var(--color-accent)]/50'}`}
                 onClick={() => handleSelect(project.id, project.path)}
-                onMouseEnter={() => setActiveIndex(index)}
+                onMouseEnter={() => hoverItem(index)}
               >
                 <span className={`mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full ${running ? 'bg-[color:var(--color-success)]' : 'bg-transparent'}`} />
                 <span className="flex min-w-0 flex-1 flex-col">

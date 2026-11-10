@@ -8,7 +8,6 @@ import { SidebarGestureHost } from '../../components/SidebarGestureHost'
 import { openUrlPopoverItem, type UrlPopoverItem } from '../../components/UrlPopover'
 import { useI18n } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
-import { CodeFileQuickDrawer } from './CodeFileQuickDrawer'
 import { CodeSidebarRailButton } from './CodeSidebarRailButton'
 import { CodeTreeContextMenu } from './CodeTreeContextMenu'
 import { CodeWorkspaceChrome } from './CodeWorkspaceChrome'
@@ -16,7 +15,7 @@ import { CodeWorkspaceEditorPane } from './CodeWorkspaceEditorPane'
 import { CodeWorkspaceSidebar } from './CodeWorkspaceSidebar'
 import { readContentSearchHistory, recordContentSearchHistory } from './code.contentSearchHistory'
 import { inferLanguageFromRelativePath, parentDirectory, pushRecentCodeFilePath, removeCodeFilePathFromDrawerState, toggleFavoriteCodeFilePath } from './code.helpers'
-import { resolveMarkdownLinkTarget } from './code.markdownLinkTarget'
+import { resolveMarkdownLinkTargetWithRootFallback } from './code.markdownLinkTarget'
 import { revealMarkdownPreviewSourceLine } from './code.markdownShared'
 import type { CodeWorkspaceNavigationState } from './code.navigation'
 import { resolveTreeNodeSearchScope } from './code.pathActions'
@@ -201,7 +200,6 @@ export function CodeWorkspacePanel({
   })
   const [leftSidebarWidth, setLeftSidebarWidth] = useState<number | null>(() => readPersistedTreeWidth())
   const [isResizingTree, setIsResizingTree] = useState(false)
-  const [isQuickDrawerOpen, setIsQuickDrawerOpen] = useState(false)
   const [viewMode, setViewMode] = useState<CodeViewMode>('files')
   const [contentSearchScopeInput, setContentSearchScopeInput] = useState(() => persistedProjectCodeSession?.contentSearchScope ?? '')
   const [activeContentSearchLocation, setActiveContentSearchLocation] = useState<{
@@ -247,18 +245,6 @@ export function CodeWorkspacePanel({
     onBeforeOpenFile: handleBeforeOpenCodeFile,
     onDidOpenFile: handleDidOpenCodeFile,
   })
-  const handleMarkdownProjectFileLinkClick = useCallback(
-    (relativePath: string) => {
-      if (!projectPath) {
-        void openFile(relativePath)
-        return
-      }
-      void resolveMarkdownLinkTarget(projectPath, relativePath).then((target) => {
-        void openFile(target ?? relativePath)
-      })
-    },
-    [openFile, projectPath],
-  )
   const {
     activeContentSearchScopeKey,
     activeContentSearchScopeLabel,
@@ -309,6 +295,43 @@ export function CodeWorkspacePanel({
       })
     },
   })
+
+  // 17：树内 reveal 一个目录——加载并展开祖先链，目录自身按需展开（未展开时才 toggle，
+  // 避免把已展开的目录误折叠），最后触发定位滚动。定位所在文件夹与搜索文件夹结果跳转共用。
+  const revealDirectoryInTree = useCallback(
+    async (directoryRelativePath: string) => {
+      if (tree.autoLoadBlocked) return
+      const directoryPath = directoryRelativePath.trim()
+      if (!directoryPath) return
+      await ensureTreePathLoaded(directoryPath)
+      if (!expandedDirectories.has(directoryPath)) {
+        await toggleDirectory(directoryPath)
+      }
+      setLocateFolderRequest((prev) => ({ relativePath: directoryPath, token: (prev?.token ?? 0) + 1 }))
+    },
+    [ensureTreePathLoaded, expandedDirectories, toggleDirectory, tree.autoLoadBlocked],
+  )
+
+  // md 链接跳转：文件 → 打开；目录（无 README/index 入口）→ 文件树定位并展开高亮；目标不存在 → 静默，
+  // 不再回退 openFile 触发 ENOENT 报错。根相对兜底覆盖按项目根意图书写的 `../../src/...` 误链。
+  const handleMarkdownProjectFileLinkClick = useCallback(
+    (relativePath: string, rootRelativeFallback?: string | null) => {
+      if (!projectPath) {
+        void openFile(relativePath)
+        return
+      }
+      void resolveMarkdownLinkTargetWithRootFallback(projectPath, relativePath, rootRelativeFallback).then((target) => {
+        if (target.kind === 'file') {
+          void openFile(target.relativePath)
+          return
+        }
+        if (target.kind === 'directory') {
+          void revealDirectoryInTree(target.relativePath)
+        }
+      })
+    },
+    [openFile, projectPath, revealDirectoryInTree],
+  )
   // 16：选择上下文标识（项目 + 模式 + 解析后查询）。用解析后的查询（剥掉 :N 行号后缀）：
   // foo.ts:12 与 foo.ts 属同一搜索上下文（行目标只影响点击跳转，不影响选择语义）。
   // 全局搜索视图额外并入内容查询：换一次内容搜索 = 新 scope，清空上一轮树内选择。
@@ -348,7 +371,7 @@ export function CodeWorkspacePanel({
   const { previewSearchVisible, previewSearchQuery, setPreviewSearchQuery, cyclePreviewSearchHistory, activePreviewSearchMatchIndex, setActivePreviewSearchMatchIndex, previewSearchMatches, previewSearchInputRef, closePreviewSearch, openPreviewSearch, goToNextPreviewSearchMatch, goToPreviousPreviewSearchMatch } =
     useMarkdownPreviewSearch(previewScrollRef, shouldHandleFindInPreview, markdownPreviewContent)
   const excludedPaths = useMemo(() => new Set(excludedPathKinds.keys()), [excludedPathKinds])
-  const { codeFileDrawerState, cursorPositionsByPath, isRestoringCodeSessionRef, openTabPaths, setCodeFileDrawerState, setCursorPositionsByPath, setOpenTabPaths, visibleOpenTabs } = useProjectCodeSessionState({
+  const { codeFileDrawerState, cursorPositionsByPath, isRestoringCodeSessionRef, openTabPaths, setCodeFileDrawerState, setCursorPositionsByPath, setOpenTabPaths } = useProjectCodeSessionState({
     projectId,
     persistedProjectCodeSession,
     persistedCodeFileDrawerState,
@@ -391,22 +414,6 @@ export function CodeWorkspacePanel({
       setLocateRequestToken((prev) => prev + 1)
     },
     [ensureTreePathLoaded, tree.autoLoadBlocked],
-  )
-
-  // 17：树内 reveal 一个目录——加载并展开祖先链，目录自身按需展开（未展开时才 toggle，
-  // 避免把已展开的目录误折叠），最后触发定位滚动。定位所在文件夹与搜索文件夹结果跳转共用。
-  const revealDirectoryInTree = useCallback(
-    async (directoryRelativePath: string) => {
-      if (tree.autoLoadBlocked) return
-      const directoryPath = directoryRelativePath.trim()
-      if (!directoryPath) return
-      await ensureTreePathLoaded(directoryPath)
-      if (!expandedDirectories.has(directoryPath)) {
-        await toggleDirectory(directoryPath)
-      }
-      setLocateFolderRequest((prev) => ({ relativePath: directoryPath, token: (prev?.token ?? 0) + 1 }))
-    },
-    [ensureTreePathLoaded, expandedDirectories, toggleDirectory, tree.autoLoadBlocked],
   )
 
   // 17：右键「定位所在文件夹」（file 菜单项）——定位目标为该文件所在目录；
@@ -493,9 +500,6 @@ export function CodeWorkspacePanel({
       setIsNarrowViewport(event.matches)
       if (!event.matches) {
         setIsExplorerOpen(true)
-      }
-      if (!event.matches) {
-        setIsQuickDrawerOpen(false)
       }
     }
 
@@ -916,7 +920,6 @@ export function CodeWorkspacePanel({
     selectionScopeKey,
     setActiveContentSearchLocation,
     setIsExplorerOpen,
-    setIsQuickDrawerOpen,
   })
 
   // 19 号计划：编辑器上下文感知快捷运行——顶部运行菜单与行级 CodeLens 共享同一份动作。
@@ -986,35 +989,6 @@ export function CodeWorkspacePanel({
     void handleSave()
   }, [handleSave])
 
-  const handleSelectOpenTab = useCallback(
-    (relativePath: string) => {
-      void openFileWithTreeLocate(relativePath)
-    },
-    [openFileWithTreeLocate],
-  )
-
-  const handleCloseOpenTab = useCallback(
-    (relativePath: string) => {
-      const normalizedPath = relativePath.trim()
-      if (!normalizedPath) return
-
-      const nextTabs = openTabPaths.filter((item) => item !== normalizedPath)
-      setOpenTabPaths(nextTabs)
-      setCursorPositionsByPath((prev) => {
-        if (!(normalizedPath in prev)) return prev
-        const next = { ...prev }
-        delete next[normalizedPath]
-        return next
-      })
-
-      if (activeRelativePath !== normalizedPath) return
-      const nextActivePath = nextTabs[nextTabs.length - 1]
-      if (nextActivePath) {
-        void openFileWithTreeLocate(nextActivePath)
-      }
-    },
-    [activeRelativePath, openFileWithTreeLocate, openTabPaths],
-  )
   const handleEditorCursorPositionChange = useCallback(
     (position: { lineNumber: number; column: number }) => {
       if (!activeRelativePath) return
@@ -1090,12 +1064,10 @@ export function CodeWorkspacePanel({
         isDirty={isDirty}
         isExplorerOpen={isExplorerOpen}
         isNarrowViewport={isNarrowViewport}
-        onCloseOpenTab={handleCloseOpenTab}
         onHandleSave={() => {
           void handleSave()
         }}
         onOpenEditorSearch={openEditorSearchByMode}
-        onOpenFileFromTab={handleSelectOpenTab}
         onOpenFirstProjectLink={() => {
           if (!hasProjectDocLinks) return
           const firstDocLink = projectLinkItems.find((item) => item.kind === 'url' || item.kind === 'ssh')
@@ -1115,11 +1087,15 @@ export function CodeWorkspacePanel({
         terminalRunningCount={terminalRunningCount}
         onResolveDiscardUnsavedConfirm={resolveDiscardUnsavedConfirm}
         onSetExplorerOpen={setIsExplorerOpen}
-        onSetQuickDrawerOpen={setIsQuickDrawerOpen}
+        quickFilePaths={quickDrawerFilePaths}
+        quickFavorites={quickDrawerFavorites}
+        quickRecents={quickDrawerRecents}
+        onQuickOpenFile={openFileFromQuickDrawer}
+        onQuickToggleFavorite={toggleFavoriteForPath}
+        onQuickRemovePath={removePathFromQuickDrawer}
         onSetViewMode={setViewMode}
         onSwitchPane={onSwitchPane}
         onToggleFavorite={toggleFavoriteForPath}
-        openTabs={visibleOpenTabs}
         projectFileSize={activeFileSize}
         projectHeaderCollapsed={projectHeaderCollapsed}
         projectDevUrlActionVisible={projectDevUrlActionVisible}
@@ -1135,18 +1111,6 @@ export function CodeWorkspacePanel({
         saveText={saveText}
         showEditorSearchActions={isShowingEditor && (activeKind === 'text' || activeKind === 'markdown' || activeKind === 'csv' || activeKind === 'html')}
         viewMode={viewMode}
-      />
-
-      <CodeFileQuickDrawer
-        open={isQuickDrawerOpen}
-        activeRelativePath={activeRelativePath}
-        filePaths={quickDrawerFilePaths}
-        favorites={quickDrawerFavorites}
-        recents={quickDrawerRecents}
-        onClose={() => setIsQuickDrawerOpen(false)}
-        onOpenFile={openFileFromQuickDrawer}
-        onToggleFavorite={toggleFavoriteForPath}
-        onRemovePath={removePathFromQuickDrawer}
       />
 
       <div className="min-h-0 flex-1">

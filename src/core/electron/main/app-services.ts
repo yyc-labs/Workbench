@@ -62,7 +62,7 @@ export type AppServicesOptions = {
   openBrowserScreenshotViewer: (payload: BrowserScreenshotViewerPayload) => Promise<boolean>
   openBrowserScreenshotWindow: () => Promise<boolean>
   /** RunTaskService is assembled after app-services; quick actions need it lazily. */
-  getRunTaskService: () => Pick<RunTaskService, 'start' | 'startAll' | 'getConfig'> | null
+  getRunTaskService: () => Pick<RunTaskService, 'restart' | 'restartAll' | 'getConfig'> | null
   navigateMainWindow: (pathname: string) => void
   ensureWindowVisible: () => void
   loadConfig: () => AppConfig

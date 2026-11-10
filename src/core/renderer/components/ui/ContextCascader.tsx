@@ -10,6 +10,10 @@ export type ContextCascaderItem = {
   icon?: ReactNode
   disabled?: boolean
   count?: string
+  /** opt-in：onSelect 后不关闭菜单（「再点一次确认」类两段交互的第一段）。 */
+  keepOpenOnSelect?: boolean
+  /** opt-in：危险确认态着色（文字/图标转 destructive），配合 keepOpenOnSelect 的第二段展示。 */
+  danger?: boolean
   tablePicker?: {
     maxRows: number
     maxColumns: number
@@ -45,6 +49,11 @@ export type ContextCascaderProps = {
   sections: ContextCascaderSection[]
   /** cascader：两列级联（默认，既有行为）；grouped：单列分组标题，items 平铺在各自 section 标题下。 */
   layout?: ContextCascaderLayout
+  /**
+   * opt-in：跳过 360px 保守钳制（小卡片被按 PANEL_MAX_HEIGHT 预留会远离锚点），按面板渲染后的
+   * 实际高度排布。y 语义变为「锚点顶边」：面板整体置于 y 上方 PANEL_GAP 处；上方放不下时钳回视口内。
+   */
+  fitHeight?: boolean
   onClose: () => void
 }
 
@@ -75,7 +84,7 @@ function getAdjacentPanelPosition(anchor: { left: number; top: number }, preferr
   }
 }
 
-const PANEL_SURFACE_CLASS = 'fixed z-[10000] overflow-hidden rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 p-1.5 text-[color:var(--color-popover-foreground)] shadow-[var(--shadow-popover)] backdrop-blur-[18px]'
+const PANEL_SURFACE_CLASS = 'fixed z-[10000] pointer-events-auto overflow-hidden rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 p-1.5 text-[color:var(--color-popover-foreground)] shadow-[var(--shadow-popover)] backdrop-blur-[18px]'
 
 const PANEL_SURFACE_STYLE: CSSProperties = {
   width: PANEL_WIDTH,
@@ -183,8 +192,14 @@ function GroupedItemRow({ item, onHoverItem, onSelectItem }: { item: ContextCasc
       onFocus={() => onHoverItem(item)}
       onClick={() => onSelectItem(item)}
     >
-      {item.icon ? <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[color:var(--color-muted-foreground)] group-hover:text-[color:var(--color-foreground)]">{item.icon}</span> : null}
-      <span className="min-w-0 flex-1 truncate text-[12px] text-[color:var(--color-foreground)]">{item.label}</span>
+      {item.icon ? (
+        <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[color:var(--color-muted-foreground)] group-hover:text-[color:var(--color-foreground)]" style={item.danger ? { color: 'var(--color-destructive)' } : undefined}>
+          {item.icon}
+        </span>
+      ) : null}
+      <span className="min-w-0 flex-1 truncate text-[12px] text-[color:var(--color-foreground)]" style={item.danger ? { color: 'var(--color-destructive)', fontWeight: 500 } : undefined}>
+        {item.label}
+      </span>
       {item.count ? <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{item.count}</span> : null}
       {hasChildren ? <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" /> : null}
     </button>
@@ -226,14 +241,18 @@ function TitleBadge({ title, hoverCard, left, top }: { title: string; hoverCard?
 
   return (
     <Tooltip anchorRef={badgeRef} interactive side="top" align="start" maxWidth={360} content={hoverCard}>
-      <div ref={badgeRef} className="fixed z-[10001] rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)] shadow-[var(--shadow-popover)]" style={{ left, top }}>
+      <div
+        ref={badgeRef}
+        className="fixed z-[10001] pointer-events-auto rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)] shadow-[var(--shadow-popover)]"
+        style={{ left, top }}
+      >
         {title}
       </div>
     </Tooltip>
   )
 }
 
-export function ContextCascader({ x, y, title, titleHoverCard, sections, layout = 'cascader', onClose }: ContextCascaderProps) {
+export function ContextCascader({ x, y, title, titleHoverCard, sections, layout = 'cascader', fitHeight = false, onClose }: ContextCascaderProps) {
   const [activeSectionId, setActiveSectionId] = useState(sections[0]?.id ?? '')
   const [activeBranch, setActiveBranch] = useState<string[]>([])
   const activeSection = useMemo(() => sections.find((section) => section.id === activeSectionId) ?? sections[0] ?? null, [activeSectionId, sections])
@@ -259,6 +278,18 @@ export function ContextCascader({ x, y, title, titleHoverCard, sections, layout 
   const groupedRootPanelRef = useRef<HTMLDivElement>(null)
   const branchPanelRef = useRef<HTMLDivElement>(null)
   const [branchPanelTop, setBranchPanelTop] = useState<number | null>(null)
+  // fitHeight：量取渲染后的实际高度，把面板贴到锚点（y）上方 PANEL_GAP 处；首帧沿用保守钳制，
+  // layout effect 在绘制前校正（无闪跳）。上方放不下整卡时钳回视口顶部。
+  const [fittedTop, setFittedTop] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    if (!fitHeight) {
+      setFittedTop(null)
+      return
+    }
+    const height = groupedRootPanelRef.current?.offsetHeight
+    if (!height) return
+    setFittedTop(clamp(y - height - PANEL_GAP, 8, Math.max(8, window.innerHeight - height - 8)))
+  }, [fitHeight, y, sections])
   useLayoutEffect(() => {
     if (layout !== 'grouped' || !activeBranch[0]) {
       setBranchPanelTop(null)
@@ -290,6 +321,17 @@ export function ContextCascader({ x, y, title, titleHoverCard, sections, layout 
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [onClose])
 
+  // grouped：外部 pointerdown 关闭卡片但不拦截该次点击——overlay 已 pointer-events-none，
+  // 事件自然落到下层元素（左键触发按钮 / 右键先关卡片再开新菜单）。面板内部 pointerdown
+  // 已 stopPropagation，不会冒泡到 document，不会误关。不监听 scroll（见上）。
+  const groupedOverlayActive = layout === 'grouped'
+  useEffect(() => {
+    if (!groupedOverlayActive) return
+    const onDocPointerDown = () => onClose()
+    document.addEventListener('pointerdown', onDocPointerDown)
+    return () => document.removeEventListener('pointerdown', onDocPointerDown)
+  }, [groupedOverlayActive, onClose])
+
   // 注意：不监听滚动关闭。菜单为 fixed 定位、不随内容移动（与主流编辑器一致）；
   // 且分组菜单条目多时面板内部可滚动（max-h 344 + overflow-auto），
   // 若监听 scroll（即使排除内部滚动）会与用户浏览菜单的滚动冲突导致误关。
@@ -301,16 +343,18 @@ export function ContextCascader({ x, y, title, titleHoverCard, sections, layout 
       return
     }
     await item.onSelect?.()
-    onClose()
+    if (!item.keepOpenOnSelect) onClose()
   }
 
   if (layout === 'grouped') {
+    // 卡片不拦截外部操作：overlay 只做 DOM 标记（pointer-events-none），外部点击直接落到下层元素；
+    // 关闭由下方 document 级 pointerdown 监听负责，面板内部 pointerdown 已 stopPropagation 不会误关。
     return createPortal(
-      <div className="fixed inset-0 z-[9999]" data-context-cascader-overlay="" onPointerDown={onClose} onContextMenu={onClose}>
+      <div className="fixed inset-0 z-[9999] pointer-events-none" data-context-cascader-overlay="">
         {title ? <TitleBadge title={title} hoverCard={titleHoverCard} left={rootPosition.left} top={Math.max(8, rootPosition.top - 28)} /> : null}
         <GroupedRootPanel
           left={rootPosition.left}
-          top={rootPosition.top}
+          top={fittedTop ?? rootPosition.top}
           sections={sections}
           containerRef={groupedRootPanelRef}
           onHoverItem={(item) => {

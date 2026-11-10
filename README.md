@@ -80,7 +80,7 @@ Workbench 不是另一个 Cursor，也不是又一个 AI Agent 封装：
 
 ### AI 基础设施
 
-**AI Runtime** —— 按项目配置并一键启动本地 AI Agent。Runtime Profile 显式区分 Windows Native 与 WSL 执行路径；Agent 运行在集成终端面板中，支持 tmux 会话恢复、进程状态与运行诊断。
+**AI Runtime** —— 按项目配置并一键启动本地 AI Agent，支持并行运行多个 AI Coding 会话。Runtime Profile 显式区分 Windows Native 与 WSL 执行路径；Agent 运行在集成终端面板中，支持 tmux 会话恢复、进程状态与运行诊断。
 
 ![AI Runtime](./docs/images/ai-runtime.png)
 
@@ -114,7 +114,7 @@ Agent 会话
     可回溯的项目历史
 ```
 
-昨天让 Agent 干了什么、改了哪些地方、为什么这么改——按项目回溯，并可生成分享快照。
+昨天让 Agent 干了什么、改了哪些地方、为什么这么改——按项目回溯，会话内容与代码双向跳转，并可生成分享快照。
 
 也可以随时按下 **Ctrl + Shift + L**：Workbench 会向当前聚焦的 Agent 终端粘贴一条提示词，Agent 自动获取 skill、总结本次会话并导入转录库——无需手动整理，每个 Agent 都能自己完成会话沉淀。
 
@@ -130,7 +130,7 @@ Agent 会话
 
 ![集成开发工作区](./docs/images/workspace.png)
 
-**终端与运行任务** —— 基于 node-pty 与 xterm.js 的交互式终端；自动识别项目启动脚本、一键启动；开发服务统一管理，支持多项目并行。
+**终端与运行任务** —— 基于 node-pty 与 xterm.js 的交互式终端。通过启动 Schema 管理项目运行配置，自动识别启动脚本、一键启动；内置项目级终端集合，支持独立会话与多标签；开发服务统一管理，支持多项目并行。
 
 ![终端与运行任务](./docs/images/project-runner.png)
 
@@ -145,6 +145,8 @@ Agent 会话
 ### 桌面集成
 
 系统托盘面板 · 全局快捷键（主题切换 / 会话捕获 / 浏览器截图 / Agent 会话总结）· 开机自启 · 多窗口 · 中英双语 · 深浅色主题
+
+> Workbench 自身的日常功能开发、重构与维护，也大量由 Agent 在 Workbench 内完成——以真实使用反馈持续验证和迭代产品。
 
 ---
 
@@ -203,7 +205,7 @@ graph TB
 
 - **Renderer**：React 页面与组件、应用状态、主题、编辑器与交互
 - **Preload**：隔离的 contextBridge，暴露最小化、类型安全的 API
-- **Main · Core Domains**：Git、Runtime、Transcript、Hooks、Learning、AI Commit
+- **Main · Core Domains**：主进程按业务域拆分为 20+ 独立模块，入口层收敛为装配层；涵盖 Git、Runtime、Transcript、Hooks、Learning、AI Commit
 - **Main · Infrastructure**：AI Gateway、Hook Gateway、node-pty、WSL Bridge、tmux、Playwright
 - **Shared**：跨层类型、配置模型、Runtime Profile 与 IPC 契约
 

@@ -6,7 +6,7 @@ import { useEffectiveTheme } from '../../hooks/useEffectiveTheme'
 import { useAppStore } from '../../stores/appStore'
 import { MarkdownFrontmatterMetaCard } from './MarkdownFrontmatterMetaCard'
 import { resolveMarkdownDocumentBase } from './markdownDocumentLinks'
-import { resolveMarkdownLinkTarget } from '../code/code.markdownLinkTarget'
+import { resolveMarkdownLinkTargetWithRootFallback } from '../code/code.markdownLinkTarget'
 
 type MarkdownDocumentReadOnlyPreviewProps = {
   content: string
@@ -38,11 +38,12 @@ export function MarkdownDocumentReadOnlyPreview({ content, activePath, previewRo
         activeRelativePath: base.activeRelativePath,
         themeMode: effectiveTheme,
         enableMarkdownSyntaxHighlight: true,
-        onProjectFileLinkClick: (relativePath) => {
+        onProjectFileLinkClick: (relativePath, rootRelativeFallback) => {
           if (!base.projectPath || !relativePath) return
-          void resolveMarkdownLinkTarget(base.projectPath, relativePath).then((target) => {
-            if (!target) return
-            onOpenPath(toPosixAbsolutePath(base.projectPath, target))
+          void resolveMarkdownLinkTargetWithRootFallback(base.projectPath, relativePath, rootRelativeFallback).then((target) => {
+            // 该页面没有文件树，目录/缺失目标不处理（目录入口文件已在 resolve 内尝试命中）
+            if (target.kind !== 'file') return
+            onOpenPath(toPosixAbsolutePath(base.projectPath, target.relativePath))
           })
         },
       }),

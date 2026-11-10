@@ -1,56 +1,8 @@
-.code-file-quick-drawer {
-  position: fixed;
-  z-index: 30;
-  top: 10px;
-  right: 10px;
-  bottom: 10px;
-  width: min(540px, calc(100% - 20px));
-  height: auto;
-  border: 1px solid var(--color-border);
-  border-radius: 24px;
-  background: color-mix(in srgb, var(--color-popover) 96%, transparent);
-  box-shadow: 0 20px 52px rgba(15, 15, 20, 0.28);
-  backdrop-filter: saturate(160%) blur(22px);
-  -webkit-backdrop-filter: saturate(160%) blur(22px);
-  overflow: hidden;
-  transform: translateX(calc(100% + 16px));
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    transform 220ms var(--spring),
-    opacity 220ms var(--spring);
-  will-change: transform;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.code-file-quick-drawer.is-open {
-  transform: translateX(0);
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.code-file-quick-drawer-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 14px 16px;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
-  background: color-mix(in srgb, var(--color-card) 64%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.code-file-quick-drawer-content {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 14px;
-  display: grid;
-  gap: 14px;
-  align-content: start;
+/* 快取卡片路径行：过长时省略「头部」、保住文件名附近的尾部。
+   direction:rtl 让 text-overflow 的省略号出现在左侧，配合 text-align:left 保持左对齐阅读。 */
+.code-quick-card-path {
+  direction: rtl;
+  text-align: left;
 }
 
 .code-file-quick-drawer-search {

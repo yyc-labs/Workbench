@@ -11,7 +11,7 @@ export type QuickActionServiceDeps = {
   loadConfig: () => AppConfig
   updateConfig: (partial: Partial<AppConfig>) => Promise<AppConfig>
   /** RunTaskService is created after app-services; the getter defers the reference. */
-  getRunTaskService: () => Pick<RunTaskService, 'start' | 'startAll' | 'getConfig'> | null
+  getRunTaskService: () => Pick<RunTaskService, 'restart' | 'restartAll' | 'getConfig'> | null
   /** True when the path belongs to a saved project and exists on disk. */
   validateProjectPath: (projectPath: string) => boolean
   navigateMainWindow: (pathname: string) => void
@@ -174,14 +174,17 @@ export function createQuickActionService(deps: QuickActionServiceDeps) {
         if (error) {
           return { ok: false, code: 'exec-failed', error: `Failed to read run task config: ${error}` }
         }
+        // 快捷操作（桌面 .lnk 双击 / 卡片 / 定时）的 run-task 语义 = 重启：
+        // 交互 shell 保活后，旧终端空壳会占住进程 key，普通 start 会把它误判
+        // 为「已在运行」而永远起不来新实例——先停旧实例并等释放，再启动。
         if (spec.taskId) {
           const task = config?.tasks.find((item) => item.id === spec.taskId)
           if (!task) return { ok: false, code: 'invalid-task' }
-          const started = await runTaskService.start(projectId, spec.projectPath, task)
+          const started = await runTaskService.restart(projectId, spec.projectPath, task)
           if (!started) return { ok: false, code: 'exec-failed', error: `Failed to start task '${task.name}'.` }
           return { ok: true, kind: 'task-started', taskIds: [task.id] }
         }
-        const result = await runTaskService.startAll(projectId, spec.projectPath, config)
+        const result = await runTaskService.restartAll(projectId, spec.projectPath, config)
         if (!result.started) {
           return { ok: false, code: 'exec-failed', error: result.error ?? 'Failed to start run tasks.' }
         }

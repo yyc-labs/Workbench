@@ -71,6 +71,18 @@ export class RunTaskService {
     return this.scheduler.startAll(projectId, projectPath, config.tasks, initialSize)
   }
 
+  /** 快捷操作启动语义：先停旧实例（含保活空壳终端），等释放后再全新启动。 */
+  async restart(projectId: string, projectPath: string, task: RunTask, initialSize?: PtySize): Promise<boolean> {
+    return this.scheduler.restart(projectId, projectPath, task, initialSize)
+  }
+
+  async restartAll(projectId: string, projectPath: string, config: RunTaskConfigFile | null, initialSize?: PtySize): Promise<{ started: boolean; error?: string }> {
+    if (!config || config.tasks.length === 0) {
+      return { started: false, error: 'No run tasks configured.' }
+    }
+    return this.scheduler.restartAll(projectId, projectPath, config.tasks, initialSize)
+  }
+
   async stop(projectId: string, taskId: string): Promise<boolean> {
     return this.scheduler.stopTask(projectId, taskId)
   }

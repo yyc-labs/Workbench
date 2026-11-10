@@ -72,8 +72,9 @@ export function DetailGitRepositorySelector({ repositories, selectedRepositoryId
         minDropdownWidth={360}
         matchTriggerWidth={false}
         className={buttonMaxWidthClass}
-        inputClassName={`h-${variant === 'inline' ? '7' : '8'} rounded-full pl-3 pr-11 text-xs`}
-        triggerClassName={`${controlHeightClass} ${buttonMaxWidthClass} bg-[color:var(--color-card)]/72 pl-3 pr-11 text-xs hover:border-[color:var(--color-border-hover)] hover:bg-[color:var(--color-popover)]/82`}
+        textSize="xs"
+        inputClassName={`h-${variant === 'inline' ? '7' : '8'} rounded-full pl-3 pr-11`}
+        triggerClassName={`${controlHeightClass} ${buttonMaxWidthClass} bg-[color:var(--color-card)]/72 pl-3 pr-11 hover:border-[color:var(--color-border-hover)] hover:bg-[color:var(--color-popover)]/82`}
         contentClassName="w-[min(360px,calc(100vw-32px))]"
         renderDisplayValue={() => <span className="min-w-0 flex-1 truncate text-[color:var(--color-foreground)]">{selectedRepository ? repositoryLabel(selectedRepository, t) : t('detail.repositorySelectorNoRepository')}</span>}
         renderOption={(option, state) => {

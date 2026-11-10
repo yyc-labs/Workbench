@@ -72,11 +72,11 @@ function isRunningStatus(status: string): boolean {
 /**
  * Ctrl+J 唤醒决策（toggleTerminalCollection 的纯函数化）。
  *
- * 规则（2026-10-18 用户确认）：
+ * 规则（2026-11-03 用户确认，收紧 2026-10-18 的兜底新建）：
  * - 非项目路由（无上下文项目）：集合里已有任意会话 → 只唤醒面板，**不新建终端**；
  *   激活上次激活项目（有会话时），否则最近打开的有会话项目。
  * - 项目路由：该项目有会话 → 唤醒；没有 → 新建（保证「在项目里 Ctrl+J 就能看到该项目的终端」）。
- * - 既无项目也无会话 → none。
+ * - 非项目路由且无任何会话（toolbox 不算会话）→ 只打开面板空态，绝不自动建终端（2026-11-03）。
  */
 export interface TerminalCollectionWakeInput {
   /** 项目路由上下文（/project/:projectId）；非项目路由为 null/undefined。 */
@@ -91,7 +91,7 @@ export interface TerminalCollectionWakeInput {
   inventoryProcessIds: readonly string[]
 }
 
-export type TerminalCollectionWakeDecision = { action: 'create'; projectId: string } | { action: 'wake'; projectId: string } | { action: 'none' }
+export type TerminalCollectionWakeDecision = { action: 'create'; projectId: string } | { action: 'wake'; projectId: string } | { action: 'open' }
 
 export function resolveTerminalCollectionWake(input: TerminalCollectionWakeInput): TerminalCollectionWakeDecision {
   // toolbox 只读不参与「有没有会话」的判断。
@@ -115,12 +115,11 @@ export function resolveTerminalCollectionWake(input: TerminalCollectionWakeInput
     if (recentWithTerminals) return { action: 'wake', projectId: recentWithTerminals }
     // 边界：会话属于已删除项目——落到清单里第一个有会话的项目。
     const firstLiveProjectId = liveKeys.map((processId) => parseTerminalProcessKey(processId)?.projectId).find((projectId): projectId is string => projectId != null)
-    return firstLiveProjectId ? { action: 'wake', projectId: firstLiveProjectId } : { action: 'none' }
+    return firstLiveProjectId ? { action: 'wake', projectId: firstLiveProjectId } : { action: 'open' }
   }
 
-  // 无任何会话：保持原语义（上次激活 ?? 最近项目）新建一个。
-  const fallback = input.activeProjectId ?? input.recentProjectIds[0] ?? null
-  return fallback ? { action: 'create', projectId: fallback } : { action: 'none' }
+  // 非项目路由且无任何会话（toolbox 不算会话）：只打开面板空态，绝不自动建终端（2026-11-03）。
+  return { action: 'open' }
 }
 
 /** 坞内一致的 kind 排序：run → primary → float → script → toolbox。 */

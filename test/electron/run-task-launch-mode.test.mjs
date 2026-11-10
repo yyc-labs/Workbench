@@ -115,3 +115,96 @@ test('未提供 initialSize 时透传 undefined（主进程兜底 80x24）', asy
   assert.equal(manager.interactiveCalls.length, 1)
   assert.equal(manager.interactiveCalls[0][4], undefined)
 })
+
+/**
+ * 重启测试用假 ProcessManager：用真实 Set 维护运行态，stop 异步释放 key
+ * （模拟 Ctrl+C → 强杀安全网 → onExit 清理的延迟）。
+ */
+function createRestartableProcessManager() {
+  const stopCalls = []
+  const startCalls = []
+  const interactiveCalls = []
+  const running = new Set()
+  let lastLaunchedKey = null
+  return {
+    stopCalls,
+    startCalls,
+    interactiveCalls,
+    running,
+    isRunning: (key) => running.has(key),
+    stop: (key) => {
+      stopCalls.push(key)
+      setTimeout(() => running.delete(key), 20)
+      return true
+    },
+    start: (...args) => {
+      startCalls.push(args)
+      running.add(args[0])
+      lastLaunchedKey = args[0]
+      return true
+    },
+    startInteractive: (...args) => {
+      interactiveCalls.push(args)
+      running.add(args[0])
+      lastLaunchedKey = args[0]
+      return true
+    },
+    addOutputTap: () => () => {},
+    addExitTap: (listener) => {
+      const key = lastLaunchedKey
+      setTimeout(() => listener(key, 0), 0)
+      return () => {}
+    },
+  }
+}
+
+test('restart 先停旧实例（含保活空壳终端）等 key 释放后再启动', async () => {
+  const manager = createRestartableProcessManager()
+  const { scheduler } = createScheduler(manager)
+
+  // 旧实例：交互 shell 保活场景——dev server 已死，但空壳终端仍占着 key。
+  manager.running.add('proj-1::run::dev')
+
+  const started = await scheduler.restart('proj-1', PROJECT_PATH, { id: 'dev', name: 'Dev', command: 'npm run dev', useWsl: false }, INITIAL_SIZE)
+
+  assert.equal(started, true)
+  assert.deepEqual(manager.stopCalls, ['proj-1::run::dev'])
+  // key 释放后全新 spawn。
+  assert.equal(manager.interactiveCalls.length, 1)
+  assert.equal(manager.running.has('proj-1::run::dev'), true)
+})
+
+test('restart 无旧实例时与 start 等价，不触发 stop', async () => {
+  const manager = createRestartableProcessManager()
+  const { scheduler } = createScheduler(manager)
+
+  const started = await scheduler.restart('proj-1', PROJECT_PATH, { id: 'dev', name: 'Dev', command: 'npm run dev', useWsl: false })
+
+  assert.equal(started, true)
+  assert.equal(manager.stopCalls.length, 0)
+  assert.equal(manager.interactiveCalls.length, 1)
+  assert.equal(manager.interactiveCalls[0][0], 'proj-1::run::dev')
+})
+
+test('restartAll 先停掉所有在跑旧任务，再整体启动新计划', async () => {
+  const manager = createRestartableProcessManager()
+  const { scheduler } = createScheduler(manager)
+
+  manager.running.add('proj-1::run::docker')
+  manager.running.add('proj-1::run::api')
+
+  const result = await scheduler.restartAll(
+    'proj-1',
+    PROJECT_PATH,
+    [
+      { id: 'docker', name: 'Docker', command: 'docker compose up -d', useWsl: false, readiness: { strategy: 'exit', timeoutMs: 50 } },
+      { id: 'api', name: 'API', command: 'npm run api', useWsl: false, dependsOn: ['docker'] },
+    ],
+    INITIAL_SIZE,
+  )
+
+  assert.equal(result.started, true)
+  assert.deepEqual(manager.stopCalls.sort(), ['proj-1::run::api', 'proj-1::run::docker'])
+  assert.equal(manager.startCalls.length, 1)
+  assert.equal(manager.interactiveCalls.length, 1)
+})

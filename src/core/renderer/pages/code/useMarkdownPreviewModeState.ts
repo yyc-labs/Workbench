@@ -27,7 +27,7 @@ type UseMarkdownPreviewModeStateOptions = {
   persistedLastMarkdownPreviewMode: string | undefined
   projectId: string
   projectPath: string
-  onProjectFileLinkClick: (relativePath: string) => void
+  onProjectFileLinkClick: (relativePath: string, rootRelativeFallback?: string | null) => void
   setProjectLastMarkdownPreviewMode: (projectId: string, mode: MarkdownPreviewMode) => Promise<void>
   themeMode: 'system' | 'light' | 'dark'
 }
@@ -180,9 +180,9 @@ export function useMarkdownPreviewModeState({ activeRelativePath, editorValue, i
         activeRelativePath,
         enableMermaidInlineZoom: false,
         enableMarkdownSyntaxHighlight,
-        onProjectFileLinkClick: (relativePath) => {
+        onProjectFileLinkClick: (relativePath, rootRelativeFallback) => {
           setStructuredPreview(null)
-          onProjectFileLinkClick(relativePath)
+          onProjectFileLinkClick(relativePath, rootRelativeFallback)
         },
         projectPath,
         themeMode: effectiveTheme,

@@ -26,7 +26,6 @@ type UseCodeTreePathActionsArgs = {
   selectionScopeKey: string
   setActiveContentSearchLocation: (value: { relativePath: string; lineNumber: number; column: number }) => void
   setIsExplorerOpen: Dispatch<SetStateAction<boolean>>
-  setIsQuickDrawerOpen: Dispatch<SetStateAction<boolean>>
 }
 
 type PendingScriptExecution = {
@@ -35,7 +34,7 @@ type PendingScriptExecution = {
   nodeKind: ProjectFileNodeKind
 }
 
-export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatch, openFile, openExcludedEntry, openFileWithTreeLocate, projectId, projectPath, selectionScopeKey, setActiveContentSearchLocation, setIsExplorerOpen, setIsQuickDrawerOpen }: UseCodeTreePathActionsArgs) {
+export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatch, openFile, openExcludedEntry, openFileWithTreeLocate, projectId, projectPath, selectionScopeKey, setActiveContentSearchLocation, setIsExplorerOpen }: UseCodeTreePathActionsArgs) {
   const { t } = useI18n()
   const collapseExplorerIfNeeded = useCallback(() => {
     if (isNarrowViewport) {
@@ -428,9 +427,8 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
     (relativePath: string) => {
       void openFileWithTreeLocate(relativePath)
       collapseExplorerIfNeeded()
-      setIsQuickDrawerOpen(false)
     },
-    [collapseExplorerIfNeeded, openFileWithTreeLocate, setIsQuickDrawerOpen],
+    [collapseExplorerIfNeeded, openFileWithTreeLocate],
   )
 
   const handleOpenContentSearchResult = useCallback(

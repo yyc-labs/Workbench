@@ -610,7 +610,7 @@ type CreateMarkdownComponentsOptions = {
   lineOffset?: number
   onCodeBlockExpand?: (payload: MarkdownCodeBlockExpandPayload) => void
   onInternalLinkClick?: (href: string) => void
-  onProjectFileLinkClick?: (relativePath: string) => void
+  onProjectFileLinkClick?: (relativePath: string, rootRelativeFallback?: string | null) => void
   onStructuredBlockClick?: (payload: MarkdownStructuredBlockClickPayload) => void
   projectPath: string
   themeMode: 'light' | 'dark'
@@ -631,26 +631,39 @@ function createHeadingComponentWithAnchor<TagName extends MarkdownHeadingTagName
   } as NonNullable<Components[TagName]>
 }
 
-function resolveProjectRelativeMarkdownLink(href: string, activeRelativePath: string | null): string | null {
+type ProjectRelativeMarkdownLinkCandidates = {
+  primary: string | null
+  rootRelativeFallback: string | null
+}
+
+function resolveProjectRelativeMarkdownLinkCandidates(href: string, activeRelativePath: string | null): ProjectRelativeMarkdownLinkCandidates {
   const encodedPath = href.trim().split(/[?#]/, 1)[0]?.replace(/\\/g, '/') ?? ''
   const path = decodeMarkdownUrlPathSafely(encodedPath)
   if (!path || path.startsWith('/') || path.startsWith('//') || isWindowsAbsolutePath(path) || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(path)) {
-    return null
+    return { primary: null, rootRelativeFallback: null }
   }
 
-  const segments = activeRelativePath ? normalizePathSegments(dirnameFromRelativePath(activeRelativePath)) : []
+  const primarySegments = activeRelativePath ? normalizePathSegments(dirnameFromRelativePath(activeRelativePath)) : []
+  const rootSegments: string[] = []
+  let primaryValid = true
   for (const segment of path.split('/')) {
     const normalized = segment.trim()
     if (!normalized || normalized === '.') continue
     if (normalized === '..') {
-      if (segments.length === 0) return null
-      segments.pop()
+      // 主候选按规范严格折叠：越出项目根即整体放弃。
+      if (primarySegments.length === 0) primaryValid = false
+      else primarySegments.pop()
+      // 根相对兜底钳制在项目根：AI 生成的文档常把项目根相对路径误写成 `../../` 前缀。
+      rootSegments.pop()
       continue
     }
-    segments.push(normalized)
+    primarySegments.push(normalized)
+    rootSegments.push(normalized)
   }
 
-  return segments.join('/') || null
+  const primary = primaryValid ? primarySegments.join('/') || null : null
+  const rootRelativeFallback = rootSegments.join('/') || null
+  return { primary, rootRelativeFallback: rootRelativeFallback && rootRelativeFallback !== primary ? rootRelativeFallback : null }
 }
 
 export function createMarkdownComponents({
@@ -718,7 +731,7 @@ export function createMarkdownComponents({
       const link = typeof href === 'string' ? href.trim() : ''
       const internal = Boolean(link) && isTranscriptReferenceHref(link)
       const canConsumeInternal = internal && typeof onInternalLinkClick === 'function'
-      const projectFilePath = onProjectFileLinkClick ? resolveProjectRelativeMarkdownLink(link, activeRelativePath) : null
+      const projectLink = onProjectFileLinkClick ? resolveProjectRelativeMarkdownLinkCandidates(link, activeRelativePath) : null
       const external = Boolean(link) && shouldOpenInSystemBrowser(link)
       const resolvedClassName = [className, internal ? 'code-markdown-transcript-ref rounded-[8px] px-1.5 py-0.5 transition-all duration-150' : '', internal && activeInternalHref === link ? 'is-active bg-[color:var(--color-warning-background)] text-[color:var(--color-foreground)]' : ''].filter(Boolean).join(' ')
 
@@ -751,9 +764,9 @@ export function createMarkdownComponents({
               if (container) scrollMarkdownPreviewToAnchor(container, link)
               return
             }
-            if (projectFilePath) {
+            if (projectLink?.primary) {
               event.preventDefault()
-              onProjectFileLinkClick?.(projectFilePath)
+              onProjectFileLinkClick?.(projectLink.primary, projectLink.rootRelativeFallback)
               return
             }
             if (!external) return

@@ -5,7 +5,7 @@ import type { ProjectPanePreload, ProjectPaneTab } from '../../components/Projec
 import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
 import type { UrlPopoverItem } from '../../components/UrlPopover'
 import { useI18n } from '../../i18n'
-import { QuickDrawerTabsCard } from './QuickDrawerTabsCard'
+import { CodeFileQuickCard } from './CodeFileQuickCard'
 import type { DiscardUnsavedConfirmState } from './useCodeFileState'
 
 type CodeWorkspaceChromeProps = {
@@ -17,10 +17,8 @@ type CodeWorkspaceChromeProps = {
   isDirty: boolean
   isExplorerOpen: boolean
   isNarrowViewport: boolean
-  onCloseOpenTab: (relativePath: string) => void
   onHandleSave: () => void
   onOpenEditorSearch: (mode: 'find' | 'replace') => void
-  onOpenFileFromTab: (relativePath: string) => void
   onOpenFirstProjectLink?: () => void
   onPreloadPane?: ProjectPanePreload
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
@@ -37,11 +35,15 @@ type CodeWorkspaceChromeProps = {
   terminalRunningCount?: number
   onResolveDiscardUnsavedConfirm: (proceed: boolean) => void
   onSetExplorerOpen: React.Dispatch<React.SetStateAction<boolean>>
-  onSetQuickDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>
   onSetViewMode: React.Dispatch<React.SetStateAction<'files' | 'search'>>
   onSwitchPane?: (pane: 'code' | 'aicommit') => void
   onToggleFavorite: (relativePath: string) => void
-  openTabs: string[]
+  quickFilePaths: string[]
+  quickFavorites: string[]
+  quickRecents: string[]
+  onQuickOpenFile: (relativePath: string) => void
+  onQuickToggleFavorite: (relativePath: string) => void
+  onQuickRemovePath: (relativePath: string) => void
   projectFileSize: number
   projectHeaderCollapsed: boolean
   projectDevUrlActionVisible?: boolean
@@ -91,10 +93,8 @@ export function CodeWorkspaceChrome({
   isDirty,
   isExplorerOpen,
   isNarrowViewport,
-  onCloseOpenTab,
   onHandleSave,
   onOpenEditorSearch,
-  onOpenFileFromTab,
   onOpenFirstProjectLink,
   onPreloadPane,
   onStartAndOpenDevUrl,
@@ -109,11 +109,15 @@ export function CodeWorkspaceChrome({
   terminalRunningCount = 0,
   onResolveDiscardUnsavedConfirm,
   onSetExplorerOpen,
-  onSetQuickDrawerOpen,
   onSetViewMode,
   onSwitchPane,
   onToggleFavorite,
-  openTabs,
+  quickFilePaths,
+  quickFavorites,
+  quickRecents,
+  onQuickOpenFile,
+  onQuickToggleFavorite,
+  onQuickRemovePath,
   projectFileSize,
   projectHeaderCollapsed,
   projectDevUrlActionVisible = false,
@@ -232,19 +236,12 @@ export function CodeWorkspaceChrome({
               </button>
             </>
           )} */}
-          <QuickDrawerTabsCard openTabs={openTabs} activeRelativePath={activeRelativePath} onOpenFile={onOpenFileFromTab} onCloseTab={onCloseOpenTab}>
-            <button
-              type="button"
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                isExplorerOpen ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-              }`}
-              onClick={() => onSetQuickDrawerOpen((prev) => !prev)}
-              title={t('codeWorkspace.quickFileDrawer')}
-            >
+          <CodeFileQuickCard activeRelativePath={activeRelativePath} filePaths={quickFilePaths} favorites={quickFavorites} recents={quickRecents} onOpenFile={onQuickOpenFile} onToggleFavorite={onQuickToggleFavorite} onRemovePath={onQuickRemovePath}>
+            <button type="button" className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]" title={t('codeWorkspace.quickFileDrawer')}>
               <PanelLeftOpen className="h-3.5 w-3.5" />
               {t('codeWorkspace.files')}
             </button>
-          </QuickDrawerTabsCard>
+          </CodeFileQuickCard>
           <div className="code-view-mode-switch" role="tablist" aria-label={t('codeWorkspace.modeAria')}>
             <button type="button" role="tab" aria-selected={viewMode === 'files'} className={`code-view-mode-btn ${viewMode === 'files' ? 'is-active' : ''}`} onClick={() => onSetViewMode('files')} title={t('codeWorkspace.fileExplorerAndEditor')}>
               <Files className="h-3.5 w-3.5" />
